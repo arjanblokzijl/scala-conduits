@@ -6,21 +6,11 @@ import scalaz.effect._
 import scalaz.effect.IO._
 import collection.immutable.IntMap
 
-//trait Base[F[_], A] {
-//  implicit def F: Monad[F]
-//  implicit def HasRef[F]
-////  def value: F[A]
-//}
-sealed class Ref[F[_], A]
-
-trait Base[F[_], A] {
-  implicit def R: Ref[F, A]
-}
 
 trait Resource[F[_]] {
   implicit def F: Monad[F]
-  type Base[A]
-  implicit def hasRef: HasRef[F, Base]
+  type Ref[A]
+  implicit def hasRef: HasRef[F, Ref]
   def resourceLiftBase[A](base: F[A]): F[A]
   def resourceLiftBracket[A](init: F[Unit], cleanup: F[Unit], body: F[A]): F[A]
 
@@ -73,22 +63,13 @@ trait HasRefInstances {
     def writeRef[A](a: => A)(ref: => STRef[S, A]) = ref.write(a).map(_ => ())
   }
 }
-trait RefInstances {
-  implicit def ioRef[A]: Ref[IORef, A] = new Ref[IORef, A]{}
-}
-trait BaseInstances {
-  implicit def ioBase[A]: Base[IORef, A] = new Base[IORef, A]{
-    implicit def R: Ref[IORef, A] = refs.ioRef
-  }
-}
 
-object refs extends RefInstances
 object hasRefs extends HasRefInstances
 
 trait ResourceInstances {
   implicit def ioResource = new Resource[IO] {
     implicit def F = ioMonad
-    type Base[A] = IORef[A]
+    type Ref[A] = IORef[A]
     implicit def hasRef = hasRefs.ioHasRef
     def resourceLiftBase[A](base: IO[A]) = base
     def resourceLiftBracket[A](init: IO[Unit], cleanup: IO[Unit], body: IO[A]): IO[A] =
@@ -99,7 +80,7 @@ trait ResourceInstances {
     val stMonad: Monad[({type λ[α] = ST[S, α]})#λ] = ST.stMonad[S] /*type annotation to keep intellij more or less happy*/
     implicit def F = stMonad
 
-    type Base[A] = STRef[S, A]
+    type Ref[A] = STRef[S, A]
 
     implicit def hasRef = hasRefs.stHasRef[S]
     def resourceLiftBase[A](base: ST[S, A]) = base

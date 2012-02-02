@@ -7,19 +7,24 @@ import scalaz.effect.IO._
 import collection.immutable.IntMap
 
 
+class Base[F[_]]
+
 trait Resource[F[_]] {
   implicit def F: Monad[F]
-  type Ref[A]
-  implicit def hasRef: HasRef[F, Ref]
   def resourceLiftBase[A](base: F[A]): F[A]
   def resourceLiftBracket[A](init: F[Unit], cleanup: F[Unit], body: F[A]): F[A]
 
-//  register :: Resource m
-//           => Base m ()
-//           -> ResourceT m ReleaseKey
-//  register rel = ResourceT $ \istate -> resourceLiftBase $ register' istate rel
+  def register[G[_]](rel: F[Unit])(implicit G: HasRef[F, G]): ResourceT[F, G, ReleaseKey] =
+      ResourceT[F, G, ReleaseKey](istate => resourceLiftBase(registerRef(istate, rel)))
 
+  def registerRef[G[_], A](istate: G[ReleaseMap[F[_]]], rel: F[Unit])(implicit G: HasRef[F, G]): F[ReleaseKey] = {
+    G.atomicModifyRef(istate)((rMap: ReleaseMap[F[_]]) => {
+      (ReleaseMap(rMap.key + 1, rMap.refCount, rMap.m.updated(rMap.key, rel)), ReleaseKey(rMap.key))
+    })
+  }
 }
+
+case class ResourceT[F[_], G[_], A](trans: G[ReleaseMap[F[_]]] => F[A])
 
 trait HasRef[F[_], G[_]] {
   implicit def F: Monad[F]
@@ -30,12 +35,6 @@ trait HasRef[F[_], G[_]] {
     F.bind(readRef(sa))(a0 => {
       val (a, b) = f(a0)
       F.bind(writeRef(a)(sa))(_ => F.point(b))
-    })
-  }
-
-  def registerRef[A](istate: G[ReleaseMap[F[_]]], rel: F[Unit]): F[ReleaseKey] = {
-    atomicModifyRef(istate)((rMap: ReleaseMap[F[_]]) => {
-      (ReleaseMap(rMap.key + 1, rMap.refCount, rMap.m.updated(rMap.key, rel)), ReleaseKey(rMap.key))
     })
   }
 }
@@ -70,7 +69,7 @@ trait ResourceInstances {
   implicit def ioResource = new Resource[IO] {
     implicit def F = ioMonad
     type Ref[A] = IORef[A]
-    implicit def hasRef = hasRefs.ioHasRef
+//    implicit def hasRef = hasRefs.ioHasRef
     def resourceLiftBase[A](base: IO[A]) = base
     def resourceLiftBracket[A](init: IO[Unit], cleanup: IO[Unit], body: IO[A]): IO[A] =
       ExceptionControl.bracket(init)(_ => cleanup)(_ => body)
@@ -80,9 +79,7 @@ trait ResourceInstances {
     val stMonad: Monad[({type λ[α] = ST[S, α]})#λ] = ST.stMonad[S] /*type annotation to keep intellij more or less happy*/
     implicit def F = stMonad
 
-    type Ref[A] = STRef[S, A]
-
-    implicit def hasRef = hasRefs.stHasRef[S]
+//    implicit def hasRef = hasRefs.stHasRef[S]
     def resourceLiftBase[A](base: ST[S, A]) = base
 
     def resourceLiftBracket[A](ma: ST[S, Unit], mb: ST[S, Unit], mc: ST[S, A]) =

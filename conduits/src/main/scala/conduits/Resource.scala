@@ -1,8 +1,9 @@
 package conduits
 
-import scalaz.Monad
 import scalaz.effect._
+import scalaz.std.list._
 import scalaz.effect.IO._
+import scalaz.Monad
 import collection.immutable.IntMap
 
 object Resources {
@@ -29,12 +30,24 @@ object Resources {
      })
   }
 
-  trait Resource[F[_]] {
-    implicit def F: Monad[F]
-    type Base[F, A]
+//  stateAlloc :: HasRef m => Ref m (ReleaseMap m) -> m ()
+//  stateAlloc istate = do
+//      atomicModifyRef' istate $ \(ReleaseMap nk rf m) ->
+//          (ReleaseMap nk (rf + 1) m, ())
 
-    def resourceLiftBase[A](base: F[A]): F[A]
-    def resourceLiftBracket[A](init: F[Unit], cleanup: F[Unit], body: F[A]): F[A]
+  def stateAlloc[F[_]](/*implicit*/H: HasRef[F])(istate: H.Ref[F[_], ReleaseMap[F[_]]])(M: Monad[F]): F[Unit] =
+      H.atomicModifyRef(istate)((rMap: ReleaseMap[F[_]]) =>
+         (ReleaseMap(rMap.key, rMap.refCount + 1, rMap.m), ()))
+
+  def stateCleanup[F[_], A](/*implicit*/H: HasRef[F])(istate: H.Ref[F[_], ReleaseMap[F[A]]])(F: Monad[F]): F[Unit] = {
+    val rmap = H.atomicModifyRef(istate)((rMap: ReleaseMap[F[A]]) =>
+       (ReleaseMap(rMap.key, rMap.refCount - 1, rMap.m), (rMap.refCount - 1, rMap.m)))
+    H.F.bind(rmap){case (rf, m) => {
+      if (rf == Int.MinValue)
+         F.map(H.F.sequence(m.values.toList))(x => ())
+      else H.F.point(())
+    }}
+  }
     //-- Note that there is some reference counting involved due to 'resourceForkIO'.
     //-- If multiple threads are sharing the same collection of resources, only the
     //-- last call to @runResourceT@ will deallocate the resources.
@@ -46,6 +59,18 @@ object Resources {
     //        (stateAlloc istate)
     //        (stateCleanup istate)
     //        (r istate)
+
+//  def runResourceT[F[_], A](r: ResourceT[F, A]): F[A] = {
+//
+//  }
+
+  trait Resource[F[_]] {
+    implicit def F: Monad[F]
+    type Base[F, A]
+
+    def resourceLiftBase[A](base: F[A]): F[A]
+    def resourceLiftBracket[A](init: F[Unit], cleanup: F[Unit], body: F[A]): F[A]
+
   }
 
   trait Ref[F[_], G[_], A] {
@@ -69,6 +94,10 @@ object Resources {
         F.bind(writeRef(a)(sa))(_ => F.point(b))
       })
     }
+//    try :: m a -> m (Either SomeException a)
+//    try = liftM Right
+    def tryR[A](fa: F[A]): F[Either[Throwable, A]] =
+      F.map(fa)(a => Right(a))
   }
 
   case class ReleaseKey(key: Int)

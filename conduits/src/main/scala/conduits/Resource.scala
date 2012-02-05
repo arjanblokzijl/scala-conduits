@@ -104,6 +104,15 @@ trait ResourceInstances {
     def resourceLiftBracket[A](ma: ST[S, Unit], mb: ST[S, Unit], mc: ST[S, A]) =
       ma.flatMap(_ => mc.flatMap(c => mb.flatMap(_ => stMonad.point(c))))
   }
+
+  implicit def resourceTMonad[F[_]](implicit H0: HasRef[F], F: Monad[F]): Monad[({type l[a] = ResourceT[F, a]})#l] = new Monad[({type l[a] = ResourceT[F, a]})#l] {
+    def bind[A, B](fa: ResourceT[F, A])(f: (A) => ResourceT[F, B]): ResourceT[F, B] = sys.error("todo")
+
+    def point[A](a: => A) = new ResourceT[F, A] {
+      implicit val H: HasRef[F] = H0
+      def value = istate => H.F.point(a)
+    }
+  }
 }
 
 

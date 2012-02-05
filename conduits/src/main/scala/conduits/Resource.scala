@@ -4,7 +4,7 @@ import scalaz.effect._
 import scalaz.std.list._
 import scalaz.effect.IO._
 import scalaz.Monad
-import collection.immutable.IntMap
+import collection.immutable.{List, IntMap}
 
 object Resources {
 
@@ -12,9 +12,22 @@ object Resources {
     sys.error("todo")
   }
 
+//  -- | The Resource transformer. This transformer keeps track of all registered
+//  -- actions, and calls them upon exit (via 'runResourceT'). Actions may be
+//  -- registered via 'register', or resources may be allocated atomically via
+//  -- 'with' or 'withIO'. The with functions correspond closely to @bracket@.
+//  --
+//  -- Releasing may be performed before exit via the 'release' function. This is a
+//  -- highly recommended optimization, as it will ensure that scarce resources are
+//  -- freed early. Note that calling @release@ will deregister the action, so that
+//  -- a release action will only ever be called once.
+//  newtype ResourceT m a =
+//      ResourceT (Ref (Base m) (ReleaseMap (Base m)) -> m a)
+
   trait ResourceT[F[_], A] {
     implicit val H: HasRef[F]
     def value: H.Ref[F[_], ReleaseMap[F[_]]] => F[A]
+    def apply(istate: H.Ref[F[_], ReleaseMap[F[_]]]): F[A] = value(istate)
   }
 
   def register[F[_]](rel: F[Unit])(implicit R: Resource[F], H0: HasRef[F]): ResourceT[F, ReleaseKey] =
@@ -35,16 +48,19 @@ object Resources {
 //      atomicModifyRef' istate $ \(ReleaseMap nk rf m) ->
 //          (ReleaseMap nk (rf + 1) m, ())
 
-  def stateAlloc[F[_]](/*implicit*/H: HasRef[F])(istate: H.Ref[F[_], ReleaseMap[F[_]]])(M: Monad[F]): F[Unit] =
+  def stateAlloc[F[_]](/*implicit*/H: HasRef[F])(istate: H.Ref[F[_], ReleaseMap[F[_]]]): F[Unit] =
       H.atomicModifyRef(istate)((rMap: ReleaseMap[F[_]]) =>
          (ReleaseMap(rMap.key, rMap.refCount + 1, rMap.m), ()))
 
-  def stateCleanup[F[_], A](/*implicit*/H: HasRef[F])(istate: H.Ref[F[_], ReleaseMap[F[A]]])(F: Monad[F]): F[Unit] = {
-    val rmap = H.atomicModifyRef(istate)((rMap: ReleaseMap[F[A]]) =>
+  def stateCleanup[F[_], A](/*implicit*/H: HasRef[F])(istate: H.Ref[F[_], ReleaseMap[F[_]]]): F[Unit] = {
+    val rmap = H.atomicModifyRef(istate)((rMap: ReleaseMap[F[_]]) =>
        (ReleaseMap(rMap.key, rMap.refCount - 1, rMap.m), (rMap.refCount - 1, rMap.m)))
     H.F.bind(rmap){case (rf, m) => {
-      if (rf == Int.MinValue)
-         F.map(H.F.sequence(m.values.toList))(x => ())
+      if (rf == Int.MinValue) {
+        val l = m.values.toList
+        l.foldRight(H.F.point(()))((f, b) => H.F.point(()))
+//        H.F.map(H.F.sequence(m.values.toList))(x => ())
+      }
       else H.F.point(())
     }}
   }
@@ -60,9 +76,11 @@ object Resources {
     //        (stateCleanup istate)
     //        (r istate)
 
-//  def runResourceT[F[_], A](r: ResourceT[F, A]): F[A] = {
-//
-//  }
+  def runResourceT[F[_], A](r: ResourceT[F, A])(implicit R: Resource[F], H: HasRef[F]): F[A] = {
+    R.F.bind(R.resourceLiftBase(r.H.newRef(ReleaseMap[F[_]](Int.MinValue, Int.MinValue))))(istate => {
+      R.resourceLiftBracket(stateAlloc(r.H)(istate), stateCleanup(r.H)(istate), r.apply(istate))
+    })
+  }
 
   trait Resource[F[_]] {
     implicit def F: Monad[F]
@@ -70,15 +88,6 @@ object Resources {
 
     def resourceLiftBase[A](base: F[A]): F[A]
     def resourceLiftBracket[A](init: F[Unit], cleanup: F[Unit], body: F[A]): F[A]
-
-  }
-
-  trait Ref[F[_], G[_], A] {
-    def newRef[A](a: => A): F[G[A]]
-
-    def readRef[A](ref: => G[A]): F[A]
-
-    def writeRef[A](a: => A)(ref: => G[A]): F[Unit]
   }
 
   trait HasRef[F[_]] {
@@ -103,20 +112,10 @@ object Resources {
   case class ReleaseKey(key: Int)
 
   object ReleaseMap {
-    def apply[F[_], A](base: F[_]): ReleaseMap[F[_]] = ReleaseMap(0, 0, IntMap((0, base)))
+    def apply[F[_]](base: F[_]): ReleaseMap[F[_]] = ReleaseMap(Int.MinValue, Int.MinValue, IntMap((0, base)))
   }
 
   case class ReleaseMap[A](key: Int, refCount: Int, m: Map[Int, A] = Map[Int, A]())
-
-  object refs {
-    implicit def ioRefToRef[A](ref: IORef[A]): Ref[IO, IORef, A] = new Ref[IO, IORef, A] {
-      def newRef[A](a: => A) = IO.newIORef(a)
-
-      def readRef[A](ref: => IORef[A]): IO[A] = ref.read
-
-      def writeRef[A](a: => A)(ref: => IORef[A]): IO[Unit] = ref.write(a)
-    }
-  }
 
   trait HasRefInstances {
     implicit def ioHasRef = new HasRef[IO] {
@@ -165,5 +164,6 @@ object Resources {
       def resourceLiftBracket[A](ma: ST[S, Unit], mb: ST[S, Unit], mc: ST[S, A]) =
         ma.flatMap(_ => mc.flatMap(c => mb.flatMap(_ => stMonad.point(c))))
     }
+
   }
 }

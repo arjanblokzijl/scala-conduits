@@ -3,30 +3,13 @@ package conduits
 import scalaz.effect._
 import scalaz.std.list._
 import scalaz.effect.IO._
-import scalaz.Monad
 import collection.immutable.{List, IntMap}
-
-
-//  -- | The Resource transformer. This transformer keeps track of all registered
-//  -- actions, and calls them upon exit (via 'runResourceT'). Actions may be
-//  -- registered via 'register', or resources may be allocated atomically via
-//  -- 'with' or 'withIO'. The with functions correspond closely to @bracket@.
-//  --
-//  -- Releasing may be performed before exit via the 'release' function. This is a
-//  -- highly recommended optimization, as it will ensure that scarce resources are
-//  -- freed early. Note that calling @release@ will deregister the action, so that
-//  -- a release action will only ever be called once.
-//  newtype ResourceT m a =
-//      ResourceT (Ref (Base m) (ReleaseMap (Base m)) -> m a)
-
-trait ResourceT[F[_], A] {
-  implicit val H: HasRef[F]
-  def value: H.Ref[F[_], ReleaseMap[F[_]]] => F[A]
-  def apply(istate: H.Ref[F[_], ReleaseMap[F[_]]]): F[A] = value(istate)
-}
+import scalaz.{Kleisli, Monad}
+import scalaz.Kleisli._
 
 trait Resource[F[_]] {
   implicit def F: Monad[F]
+  implicit val H: HasRef[F]
 
   def resourceLiftBase[A](base: F[A]): F[A]
   def resourceLiftBracket[A](init: F[Unit], cleanup: F[Unit], body: F[A]): F[A]
@@ -85,7 +68,7 @@ object hasRefs extends HasRefInstances
 trait ResourceInstances {
   implicit def ioResource = new Resource[IO] {
     implicit def F = ioMonad
-    implicit val HR: HasRef[IO] = hasRefs.ioHasRef
+    implicit val H: HasRef[IO] = hasRefs.ioHasRef
 
     def resourceLiftBase[A](base: IO[A]) = base
 
@@ -97,7 +80,7 @@ trait ResourceInstances {
     val stMonad: Monad[({type λ[α] = ST[S, α]})#λ] = ST.stMonad[S] /*type annotation to keep intellij more or less happy*/
     implicit def F = stMonad
 
-    implicit val HR: HasRef[({type λ[α] = ST[S, α]})#λ] = hasRefs.stHasRef[S]
+    implicit val H: HasRef[({type λ[α] = ST[S, α]})#λ] = hasRefs.stHasRef[S]
 
     def resourceLiftBase[A](base: ST[S, A]) = base
 
@@ -105,16 +88,30 @@ trait ResourceInstances {
       ma.flatMap(_ => mc.flatMap(c => mb.flatMap(_ => stMonad.point(c))))
   }
 
-  implicit def resourceTMonad[F[_]](implicit H0: HasRef[F], F: Monad[F]): Monad[({type l[a] = ResourceT[F, a]})#l] = new Monad[({type l[a] = ResourceT[F, a]})#l] {
-    def bind[A, B](fa: ResourceT[F, A])(f: (A) => ResourceT[F, B]): ResourceT[F, B] = sys.error("todo")
+//  implicit def resourceTMonad[F[_]](implicit H0: HasRef[F], F: Monad[F]): Monad[({type l[a] = ResourceT[F, a]})#l] = new Monad[({type l[a] = ResourceT[F, a]})#l] {
+//    def bind[A, B](fa: ResourceT[F, A])(f: (A) => ResourceT[F, B]): ResourceT[F, B] = new ResourceT[F, B] {
+//      implicit val H: HasRef[F] = fa.H
+//      def value = kleisli(s => F0.bind(fa.value.run(s))((a: A) => f(a).value.run(s)))
+//    }
+//
+//    def point[A](a: => A) = new ResourceT[F, A] {
+//      implicit val H: HasRef[F] = H0
+//      def value = kleisli(s => F0.point(a))
+//    }
+//  }
 
-    def point[A](a: => A) = new ResourceT[F, A] {
-      implicit val H: HasRef[F] = H0
-      def value = istate => H.F.point(a)
-    }
-  }
 }
 
+//  newtype ResourceT m a =
+//      ResourceT (Ref (Base m) (ReleaseMap (Base m)) -> m a)
+
+trait ResourceT[F[_], A] {self =>
+  implicit val H: HasRef[F]
+  val F0 = H.F
+
+  def value: Kleisli[F, H.Ref[F[_], ReleaseMap[F[_]]], A]
+  def apply(istate: H.Ref[F[_], ReleaseMap[F[_]]]): F[A] = value.run(istate)
+}
 
 trait ResourceFunctions {
   def newRef[F[_], A](a: => A)(implicit R: Resource[F]): ResourceT[F, A] = {
@@ -124,15 +121,14 @@ trait ResourceFunctions {
   def register[F[_]](rel: F[Unit])(implicit R: Resource[F], H0: HasRef[F]): ResourceT[F, ReleaseKey] =
     new ResourceT[F, ReleaseKey] {
       implicit val H: HasRef[F] = H0
-
-      def value = istate =>
-        R.resourceLiftBase(registerRef(H)(istate, rel))
+      def value = kleisli(istate =>
+        R.resourceLiftBase(registerRef(H)(istate, rel)))
     }
 
   def registerRef[F[_]](/*implicit*/ H: HasRef[F])(istate: H.Ref[F[_], ReleaseMap[F[_]]], rel: F[Unit]): F[ReleaseKey] = {
-    H.atomicModifyRef(istate)((rMap: ReleaseMap[F[_]]) => {
+    H.atomicModifyRef(istate)((rMap: ReleaseMap[F[_]]) =>
       (ReleaseMap(rMap.key + 1, rMap.refCount, rMap.m.updated(rMap.key, rel)), ReleaseKey(rMap.key))
-    })
+    )
   }
 
   def stateAlloc[F[_]](/*implicit*/ H: HasRef[F])(istate: H.Ref[F[_], ReleaseMap[F[_]]]): F[Unit] =
@@ -151,21 +147,9 @@ trait ResourceFunctions {
     }
   }
 
-  //-- Note that there is some reference counting involved due to 'resourceForkIO'.
-  //-- If multiple threads are sharing the same collection of resources, only the
-  //-- last call to @runResourceT@ will deallocate the resources.
-  //runResourceT :: Resource m => ResourceT m a -> m a
-  //runResourceT (ResourceT r) = do
-  //    istate <- resourceLiftBase $ newRef'
-  //        $ ReleaseMap minBound minBound IntMap.empty
-  //    resourceBracket_
-  //        (stateAlloc istate)
-  //        (stateCleanup istate)
-  //        (r istate)
-
   def runResourceT[F[_], A](rt: ResourceT[F, A])(implicit R: Resource[F]): F[A] =
     R.F.bind(R.resourceLiftBase(rt.H.newRef(ReleaseMap[F[_]](Int.MinValue, Int.MinValue))))(istate => {
-      R.resourceLiftBracket(stateAlloc(rt.H)(istate), stateCleanup(rt.H)(istate), rt(istate))
+      R.resourceLiftBracket(stateAlloc(rt.H)(istate), stateCleanup(rt.H)(istate), rt.apply(istate))
     })
 }
 

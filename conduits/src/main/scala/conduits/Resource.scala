@@ -91,6 +91,18 @@ trait ResourceInstances {
     def resourceLiftBracket[A](ma: ST[S, Unit], mb: ST[S, Unit], mc: ST[S, A]) =
       ma.flatMap(_ => mc.flatMap(c => mb.flatMap(_ => stMonad.point(c))))
   }
+
+  implicit def resourceTMonad[F[_]](implicit H0: HasRef[F], F0: Monad[F]): Monad[({type l[a] = ResourceT[F, a]})#l] = new Monad[({type l[a] = ResourceT[F, a]})#l] {
+    def bind[A, B](fa: ResourceT[F, A])(f: (A) => ResourceT[F, B]): ResourceT[F, B] = new ResourceT[F, B] {
+      implicit val F: Monad[F] = F0
+      def value[G[_]](implicit D: Dep[F, G]) = kleisli(s => F.bind(fa.value.run(s))((a: A) => f(a).value.run(s)))
+    }
+
+    def point[A](a: => A) = new ResourceT[F, A] {
+      implicit val F: Monad[F] = F0
+      def value[G[_]](implicit D: Dep[F, G]) = kleisli(s => F0.point(a))
+    }
+  }
 }
 
 //  newtype ResourceT m a =
@@ -106,13 +118,6 @@ trait ResourceT[F[_], A] {self =>
   implicit val F: Monad[F]
   def value[G[_]](implicit D: Dep[F, G]): Kleisli[F, G[ReleaseMap[F[_]]], A]
   def apply[G[_]](istate: G[ReleaseMap[F[_]]])(implicit D: Dep[F, G]): F[A] = value.run(istate)
-  def flatMap[B, G[_]](f: A => ResourceT[F, B])(implicit D: Dep[F, G]) = {
-    new ResourceT[F, B] {
-      implicit val F: Monad[F] = self.F
-      def value[G[_]](implicit D: Dep[F, G]): Kleisli[F, G[ReleaseMap[F[_]]], B] =
-          kleisli(s => F.bind(self.value.run(s))((a: A) => f(a).value.run(s)))
-    }
-  }
 }
 
 trait ResourceFunctions {

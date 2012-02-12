@@ -5,6 +5,7 @@ import scalaz.effect.IO._
 import collection.immutable.IntMap
 import scalaz.{Kleisli, Monad}
 import scalaz.Kleisli._
+import scalaz.MonadTrans
 
 trait Resource[F[_]] {
   implicit def F: Monad[F]
@@ -92,32 +93,30 @@ trait ResourceInstances {
       ma.flatMap(_ => mc.flatMap(c => mb.flatMap(_ => stMonad.point(c))))
   }
 
-  implicit def resourceTMonad[F[_]](implicit H0: HasRef[F], F0: Monad[F]): Monad[({type l[a] = ResourceT[F, a]})#l] = new Monad[({type l[a] = ResourceT[F, a]})#l] {
+  implicit def resourceTMonad[F[_]](implicit F0: Monad[F]): Monad[({type l[a] = ResourceT[F, a]})#l] = new Monad[({type l[a] = ResourceT[F, a]})#l] {
     def bind[A, B](fa: ResourceT[F, A])(f: (A) => ResourceT[F, B]): ResourceT[F, B] = new ResourceT[F, B] {
-      implicit val F: Monad[F] = F0
-      def value[G[_]](implicit D: Dep[F, G]) = kleisli(s => F.bind(fa.value.run(s))((a: A) => f(a).value.run(s)))
+      def value[G[_]](implicit D: Dep[F, G]) = kleisli(s => F0.bind(fa.value.run(s))((a: A) => f(a).value.run(s)))
     }
 
     def point[A](a: => A) = new ResourceT[F, A] {
-      implicit val F: Monad[F] = F0
       def value[G[_]](implicit D: Dep[F, G]) = kleisli(s => F0.point(a))
+    }
+  }
+
+  implicit def resourceTMonadT[F[_]](implicit F0: Monad[F]): MonadTrans[({type l[a[_], b] = ResourceT[a, b]})#l] = new MonadTrans[({type l[a[_], b] = ResourceT[a, b]})#l] {
+    implicit def apply[G[_]](implicit M: Monad[G]): Monad[({type λ[α] = ResourceT[G, α]})#λ] = resourceTMonad[G]
+    def liftM[G[_], A](ga: G[A])(implicit M: Monad[G]): ResourceT[G, A] = new ResourceT[G, A] {
+      def value[R[_]](implicit D: Dep[G, R]): Kleisli[G, R[ReleaseMap[G[_]]], A] = kleisli(s => M.map(ga)(identity))
     }
   }
 }
 
 //  newtype ResourceT m a =
 //      ResourceT (Ref (Base m) (ReleaseMap (Base m)) -> m a)
-object ResourceT {
-//  def rt[F[_], G[_], A](ref: G[ReleaseMap[F[_]]])(implicit F0: Monad[F], D: Dep[F, G]) = new ResourceT[F, A] {
-//    implicit val F: Monad[F] = F0
-//    def value[G[_]](implicit D: Dep[F, G]): Kleisli[F, G[ReleaseMap[F[_]]], A] = kleisli(s => ref.run(s))
-//  }
-}
-
 trait ResourceT[F[_], A] {self =>
-  implicit val F: Monad[F]
-  def value[G[_]](implicit D: Dep[F, G]): Kleisli[F, G[ReleaseMap[F[_]]], A]
-  def apply[G[_]](istate: G[ReleaseMap[F[_]]])(implicit D: Dep[F, G]): F[A] = value.run(istate)
+//  implicit val F: Monad[F]
+  def value[R[_]](implicit D: Dep[F, R]): Kleisli[F, R[ReleaseMap[F[_]]], A]
+  def apply[R[_]](istate: R[ReleaseMap[F[_]]])(implicit D: Dep[F, R]): F[A] = value.run(istate)
 }
 
 trait ResourceFunctions {

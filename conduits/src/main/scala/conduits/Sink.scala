@@ -27,10 +27,13 @@ case class Sink[I, F[_], O](prepare: ResourceT[F, PreparedSink[I, F, O]])
 
 trait SinkInstances {
   implicit def preparedSinkFunctor[I, F[_]]: Functor[({type l[a] = PreparedSink[I, F, a]})#l] = new Functor[({type l[a] = PreparedSink[I, F, a]})#l] {
-
     def map[A, B](fa: PreparedSink[I, F, A])(f: (A) => B): PreparedSink[I, F, B] = fa match {
       case SinkNoData(o) => SinkNoData(f(o))
-      case SinkData(p, c) => SinkData(sinkPush = sys.error(""), sinkClose = sys.error(""))
+      case SinkData(p, c) => SinkData(sinkPush = {
+
+          sys.error("")
+        },
+                                      sinkClose = sys.error(""))
     }
   }
 }

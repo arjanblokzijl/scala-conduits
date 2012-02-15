@@ -1,9 +1,9 @@
 package conduits
 
-import scalaz.{Functor, Monad}
 
 import sinks._
 import resource._
+import scalaz.{MonadTrans, Functor, Monad}
 
 sealed trait Sink[I, F[_], O]
 case class SinkNoData[I, F[_], O](output: O) extends Sink[I, F, O]
@@ -56,35 +56,54 @@ trait SinkInstances {
     }
   }
 
-  implicit def sinkMonad[I, F[_]](implicit R: Resource[F]): Monad[({type l[a] = Sink[I, F, a]})#l] = new Monad[({type l[a] = Sink[I, F, a]})#l] {
-    implicit val M: Monad[F] = R.F
-    val rtm = resourceTMonad[F]
-    def point[A](a: => A) = SinkNoData(a)
+  implicit def sinkMonad[I, F[_]](implicit R0: Resource[F]): Monad[({type l[a] = Sink[I, F, a]})#l] = new SinkMonad[I, F] {
+    implicit val M = R0.F
+  }
 
-    def bind[A, B](fa: Sink[I, F, A])(f: (A) => Sink[I, F, B]) = {
-      def pushHelper(i: Option[I])(r: Sink[I, F, B]): ResourceT[F, SinkResult[I, F, B]] = (i, r) match {
-        case (lo, SinkNoData(y)) => rtm.point(Done(lo, y))
-        case (Some(l), (SinkData(pushF, _))) => pushF(l)
-        case (None, (SinkData(pushF, closeF))) => rtm.point(Processing(pushF, closeF))
-      }
-      def closeHelper(s: Sink[I, F, B]): ResourceT[F, B] = s match {
-        case SinkNoData(y) => rtm.point(y)
-        case SinkData(_, closeF) => closeF
-      }
-      def close(closei: SinkClose[I, F, A]): SinkClose[I, F, B] = rtm.bind(closei)((output: A) => closeHelper(f(output)))
+  implicit def sinkMonadTrans[I, F[_]](implicit R0: Resource[F]): MonadTrans[({type l[a[_], b] = Sink[I, a, b]})#l] = new MonadTrans[({type l[a[_], b] = Sink[I, a, b]})#l] {
+    implicit def apply[M[_]](implicit M0: Monad[M]): Monad[({type l[a] = Sink[I, M, a]})#l] = new SinkMonad[I, M] {
+      implicit val M = M0
+    }
 
-      def push(pushi : SinkPush[I, F, A])(i: I): ResourceT[F, SinkResult[I, F, B]] = {
-        rtm.bind(pushi(i))((res: SinkResult[I, F, A]) => res match {
-          case Done(lo, output) => pushHelper(lo)(f(output))
-          case Processing(pushii, closeii) => rtm.point(Processing(push(pushii), (close(closeii))))
-        })
-      }
+  def liftM[G[_], A](ga: G[A])(implicit M: Monad[G]): Sink[I, G, A] = {
+      import scalaz.Kleisli._
+      SinkLift[I, G, A](new ResourceT[G, Sink[I, G, A]] {
+        def value[R[_]](implicit D: Dep[G, R]) = kleisli(x => M.map(ga)((a: A) => SinkNoData(a))) //TODO check whether this makes sense
+      })
+    }
+  }
+}
 
-      fa match {
-        case SinkNoData(x) => f(x)
-        case SinkData(push0, close0) => SinkData(push(push0), close(close0))
-        case SinkLift(rt) => SinkLift(rtm.bind(rt)((x: Sink[I, F, A]) => rtm.point(bind(x)(f))))
-      }
+private[conduits] trait SinkMonad[I, F[_]] extends Monad[({type l[a] = Sink[I, F, a]})#l] {
+  implicit val M: Monad[F]
+  val rtm = resourceTMonad[F]
+  def point[A](a: => A) = SinkNoData(a)
+
+  def bind[A, B](fa: Sink[I, F, A])(f: (A) => Sink[I, F, B]) = {
+    def pushHelper(i: Option[I])(r: Sink[I, F, B]): ResourceT[F, SinkResult[I, F, B]] = (i, r) match {
+      case (lo, SinkNoData(y)) => rtm.point(Done(lo, y))
+      case (Some(l), (SinkData(pushF, _))) => pushF(l)
+      case (None, (SinkData(pushF, closeF))) => rtm.point(Processing(pushF, closeF))
+      case (lo, (SinkLift(msink))) => rtm.bind(msink)(pushHelper(lo))
+    }
+    def closeHelper(s: Sink[I, F, B]): ResourceT[F, B] = s match {
+      case SinkNoData(y) => rtm.point(y)
+      case SinkData(_, closeF) => closeF
+      case SinkLift(msink) => rtm.bind(msink)(closeHelper(_))
+    }
+    def close(closei: SinkClose[I, F, A]): SinkClose[I, F, B] = rtm.bind(closei)((output: A) => closeHelper(f(output)))
+
+    def push(pushi : SinkPush[I, F, A])(i: I): ResourceT[F, SinkResult[I, F, B]] = {
+      rtm.bind(pushi(i))((res: SinkResult[I, F, A]) => res match {
+        case Done(lo, output) => pushHelper(lo)(f(output))
+        case Processing(pushii, closeii) => rtm.point(Processing(push(pushii), (close(closeii))))
+      })
+    }
+
+    fa match {
+      case SinkNoData(x) => f(x)
+      case SinkData(push0, close0) => SinkData(push(push0), close(close0))
+      case SinkLift(rt) => SinkLift(rtm.bind(rt)((x: Sink[I, F, A]) => rtm.point(bind(x)(f))))
     }
   }
 }

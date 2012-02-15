@@ -111,10 +111,7 @@ trait ResourceInstances {
   }
 }
 
-//  newtype ResourceT m a =
-//      ResourceT (Ref (Base m) (ReleaseMap (Base m)) -> m a)
 trait ResourceT[F[_], A] {self =>
-//  implicit val F: Monad[F]
   def value[R[_]](implicit D: Dep[F, R]): Kleisli[F, R[ReleaseMap[F[_]]], A]
   def apply[R[_]](istate: R[ReleaseMap[F[_]]])(implicit D: Dep[F, R]): F[A] = value.run(istate)
 }

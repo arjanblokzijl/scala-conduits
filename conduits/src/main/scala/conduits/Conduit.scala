@@ -21,8 +21,8 @@ case class Conduit[I, F[_], O](conduitPush: ConduitPush[I, F, O],
 sealed trait ConduitResult[I, F[_], O] {
   def map[B](f: O => B)(implicit M: Monad[F]): ConduitResult[I, F, B]
 }
-case class Producing[I, F[_], O](c: Conduit[I, F, O], output: Stream[O]) extends ConduitResult[I, F, O] {
-  def map[B](f: (O) => B)(implicit M: Monad[F]) = Producing(c map f, output.map(f))
+case class Producing[I, F[_], O](conduit: Conduit[I, F, O], output: Stream[O]) extends ConduitResult[I, F, O] {
+  def map[B](f: (O) => B)(implicit M: Monad[F]) = Producing(conduit map f, output.map(f))
 }
 case class Finished[I, F[_], O](maybeInput: Option[I], output: Stream[O])  extends ConduitResult[I, F, O] {
   def map[B](f: (O) => B)(implicit M: Monad[F]) = Finished(maybeInput, output.map(f))
@@ -34,7 +34,7 @@ trait ConduitFunctions {
 }
 
 trait ConduitInstances {
-  implicit def conduitFunctor[I, F[_]](implicit M0: Monad[F]) = new Functor[({type l[a] = Conduit[I, F, a]})#l] {
+  implicit def conduitFunctor[I, F[_]](implicit M0: Monad[F]): Functor[({type l[a] = Conduit[I, F, a]})#l] = new Functor[({type l[a] = Conduit[I, F, a]})#l] {
      def map[A, B](fa: Conduit[I, F, A])(f: (A) => B): Conduit[I, F, B] = fa map f
   }
 }

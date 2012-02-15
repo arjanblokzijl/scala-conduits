@@ -3,7 +3,8 @@ package conduits
 
 import sinks._
 import resource._
-import scalaz.{MonadTrans, Functor, Monad}
+import scalaz.{Applicative, MonadTrans, Functor, Monad}
+import scalaz.effect.{IO, MonadIO}
 
 sealed trait Sink[I, F[_], O]
 case class SinkNoData[I, F[_], O](output: O) extends Sink[I, F, O]
@@ -65,13 +66,19 @@ trait SinkInstances {
       implicit val M = M0
     }
 
-  def liftM[G[_], A](ga: G[A])(implicit M: Monad[G]): Sink[I, G, A] = {
+    def liftM[G[_], A](ga: G[A])(implicit M: Monad[G]): Sink[I, G, A] = {
       import scalaz.Kleisli._
       SinkLift[I, G, A](new ResourceT[G, Sink[I, G, A]] {
         def value[R[_]](implicit D: Dep[G, R]) = kleisli(x => M.map(ga)((a: A) => SinkNoData(a))) //TODO check whether this makes sense
       })
     }
   }
+
+  implicit def sinkMonadIO[I, F[_]](implicit M0: MonadIO[F]): MonadIO[({type l[a] = Sink[I, F, a]})#l] = new SinkMonadIO[I, F] {
+    implicit def F = M0
+    implicit val M = M0
+  }
+
 }
 
 private[conduits] trait SinkMonad[I, F[_]] extends Monad[({type l[a] = Sink[I, F, a]})#l] {
@@ -106,6 +113,12 @@ private[conduits] trait SinkMonad[I, F[_]] extends Monad[({type l[a] = Sink[I, F
       case SinkLift(rt) => SinkLift(rtm.bind(rt)((x: Sink[I, F, A]) => rtm.point(bind(x)(f))))
     }
   }
+}
+
+private[conduits] trait SinkMonadIO[I, F[_]] extends MonadIO[({type l[a] = Sink[I, F, a]})#l] with SinkMonad[I, F] {
+  implicit def F: MonadIO[F]
+
+  def liftIO[A](ioa: IO[A]) = MonadTrans[({type l[a[_], b] = Sink[I,a, b]})#l].liftM(F.liftIO(ioa))
 }
 
 trait SinkFunctions {

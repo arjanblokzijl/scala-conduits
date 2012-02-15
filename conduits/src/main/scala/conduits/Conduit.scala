@@ -8,29 +8,29 @@ import conduits._
 import scalaz.{Functor, Monad}
 import resource._
 
-case class Conduit[I, F[_], O](conduitPush: ConduitPush[I, F, O],
-                               conduitClose: ConduitClose[F, O]) {
-  def map[B](f: (O) => B)(implicit M: Monad[F]): Conduit[I, F, B] = {
+case class Conduit[I, F[_], A](conduitPush: ConduitPush[I, F, A],
+                               conduitClose: ConduitClose[F, A]) {
+  def map[B](f: (A) => B)(implicit M: Monad[F]): Conduit[I, F, B] = {
     val c = conduitClose
-    Conduit[I, F, B]((i: I) => resourceTMonad[F].map[ConduitResult[I, F, O], ConduitResult[I, F, B]](conduitPush(i))((r: ConduitResult[I, F, O]) => r.map[B](f)),
-      resourceTMonad[F].map[Stream[O], Stream[B]](c)(r => r.map(f)))
+    Conduit[I, F, B]((i: I) => resourceTMonad[F].map[ConduitResult[I, F, A], ConduitResult[I, F, B]](conduitPush(i))((r: ConduitResult[I, F, A]) => r.map[B](f)),
+      resourceTMonad[F].map[Stream[A], Stream[B]](c)(r => r.map(f)))
   }
 
 }
 
-sealed trait ConduitResult[I, F[_], O] {
-  def map[B](f: O => B)(implicit M: Monad[F]): ConduitResult[I, F, B]
+sealed trait ConduitResult[I, F[_], A] {
+  def map[B](f: A => B)(implicit M: Monad[F]): ConduitResult[I, F, B]
 }
-case class Producing[I, F[_], O](conduit: Conduit[I, F, O], output: Stream[O]) extends ConduitResult[I, F, O] {
-  def map[B](f: (O) => B)(implicit M: Monad[F]) = Producing(conduit map f, output.map(f))
+case class Producing[I, F[_], A](conduit: Conduit[I, F, A], output: Stream[A]) extends ConduitResult[I, F, A] {
+  def map[B](f: (A) => B)(implicit M: Monad[F]) = Producing(conduit map f, output.map(f))
 }
-case class Finished[I, F[_], O](maybeInput: Option[I], output: Stream[O])  extends ConduitResult[I, F, O] {
-  def map[B](f: (O) => B)(implicit M: Monad[F]) = Finished(maybeInput, output.map(f))
+case class Finished[I, F[_], A](maybeInput: Option[I], output: Stream[A])  extends ConduitResult[I, F, A] {
+  def map[B](f: (A) => B)(implicit M: Monad[F]) = Finished(maybeInput, output.map(f))
 }
 
 trait ConduitFunctions {
-  type ConduitPush[I, F[_], O] = I => ResourceT[F, ConduitResult[I, F, O]]
-  type ConduitClose[F[_], O] = ResourceT[F, Stream[O]]
+  type ConduitPush[I, F[_], A] = I => ResourceT[F, ConduitResult[I, F, A]]
+  type ConduitClose[F[_], A] = ResourceT[F, Stream[A]]
 }
 
 trait ConduitInstances {

@@ -6,16 +6,16 @@ import resource._
 import scalaz.{Applicative, MonadTrans, Functor, Monad}
 import scalaz.effect.{IO, MonadIO}
 
-sealed trait Sink[I, F[_], O]
-case class SinkNoData[I, F[_], O](output: O) extends Sink[I, F, O]
-case class SinkData[I, F[_], O](sinkPush: SinkPush[I, F, O],
-                                sinkClose: SinkClose[I, F, O]) extends Sink[I, F, O]
-case class SinkLift[I, F[_], O](res: ResourceT[F, Sink[I, F, O]]) extends Sink[I, F, O]
+sealed trait Sink[I, F[_], A]
+case class SinkNoData[I, F[_], A](output: A) extends Sink[I, F, A]
+case class SinkData[I, F[_], A](sinkPush: SinkPush[I, F, A],
+                                sinkClose: SinkClose[I, F, A]) extends Sink[I, F, A]
+case class SinkLift[I, F[_], A](res: ResourceT[F, Sink[I, F, A]]) extends Sink[I, F, A]
 
-sealed trait SinkResult[I, F[_], O] {
+sealed trait SinkResult[I, F[_], A] {
   //pattern matching directly here gives the 'type constructor inapplicable for none' compiler error. This is solved with the latest scala dist.
   //as a temporary workaround, make map abstract and override in the subclasses.
-  def map[B](f: O => B)(implicit M: Monad[F]): SinkResult[I, F, B]
+  def map[B](f: A => B)(implicit M: Monad[F]): SinkResult[I, F, B]
   //  def map[B](f: O => B)(implicit M: Monad[F]): SinkResult[I, F, B] = this match {
 //      case proc: Processing[I, F, B] =>
 //        Processing[I, F, B](push = i =>
@@ -24,15 +24,15 @@ sealed trait SinkResult[I, F[_], O] {
 //      case d: Done[I, F, O] => Done[I, F, B](d.input, f(d.output))
 //    }
 }
-case class Processing[I, F[_], O](push: SinkPush[I, F, O], close: SinkClose[I, F, O]) extends SinkResult[I, F, O] {
-  def map[B](f: O => B)(implicit M: Monad[F]): SinkResult[I, F, B] = Processing[I, F, B](i =>
-    resourceTMonad[F].map[SinkResult[I, F, O], SinkResult[I, F, B]](push(i))((r: SinkResult[I, F, O]) => r.map(f))
-    , resourceTMonad[F].map[O, B](close)((r: O) => f(r)))
+case class Processing[I, F[_], A](push: SinkPush[I, F, A], close: SinkClose[I, F, A]) extends SinkResult[I, F, A] {
+  def map[B](f: A => B)(implicit M: Monad[F]): SinkResult[I, F, B] = Processing[I, F, B](i =>
+    resourceTMonad[F].map[SinkResult[I, F, A], SinkResult[I, F, B]](push(i))((r: SinkResult[I, F, A]) => r.map(f))
+    , resourceTMonad[F].map[A, B](close)((r: A) => f(r)))
 
 }
 
-case class Done[I, F[_], O](input: Option[I], output: O) extends SinkResult[I, F, O] {
-  def map[B](f: O => B)(implicit M: Monad[F]): SinkResult[I, F, B] = Done[I, F, B](input, f(output))
+case class Done[I, F[_], A](input: Option[I], output: A) extends SinkResult[I, F, A] {
+  def map[B](f: A => B)(implicit M: Monad[F]): SinkResult[I, F, B] = Done[I, F, B](input, f(output))
 }
 
 trait SinkInstances {
@@ -122,8 +122,8 @@ private[conduits] trait SinkMonadIO[I, F[_]] extends MonadIO[({type l[a] = Sink[
 }
 
 trait SinkFunctions {
-  type SinkPush[I, F[_], O] = I => ResourceT[F, SinkResult[I, F, O]]
-  type SinkClose[I, F[_], O] = ResourceT[F, O]
+  type SinkPush[I, F[_], A] = I => ResourceT[F, SinkResult[I, F, A]]
+  type SinkClose[I, F[_], A] = ResourceT[F, A]
 }
 
 object sinks extends SinkFunctions with SinkInstances

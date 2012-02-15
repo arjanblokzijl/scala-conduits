@@ -9,6 +9,7 @@ sealed trait Sink[I, F[_], O]
 case class SinkNoData[I, F[_], O](output: O) extends Sink[I, F, O]
 case class SinkData[I, F[_], O](sinkPush: SinkPush[I, F, O],
                                 sinkClose: SinkClose[I, F, O]) extends Sink[I, F, O]
+case class SinkLift[I, F[_], O](res: ResourceT[F, Sink[I, F, O]]) extends Sink[I, F, O]
 
 sealed trait SinkResult[I, F[_], O] {
   //pattern matching directly here gives the 'type constructor inapplicable for none' compiler error. This is solved with the latest scala dist.
@@ -51,6 +52,7 @@ trait SinkInstances {
                                                   resourceTMonad[F].map[SinkResult[I, F, A], SinkResult[I, F, B]](p(i))((r: SinkResult[I, F, A]) => r.map(f)),
                                       sinkClose = resourceTMonad[F].map[A, B](c)(r => f(r))
                                       )
+      case SinkLift(rt) => SinkLift(resourceTMonad[F].map(rt)(r => map(r)(f)))
     }
   }
 
@@ -81,7 +83,7 @@ trait SinkInstances {
       fa match {
         case SinkNoData(x) => f(x)
         case SinkData(push0, close0) => SinkData(push(push0), close(close0))
-
+        case SinkLift(rt) => SinkLift(rtm.bind(rt)((x: Sink[I, F, A]) => rtm.point(bind(x)(f))))
       }
     }
   }

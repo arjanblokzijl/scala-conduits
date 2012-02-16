@@ -25,5 +25,8 @@ object ExceptionControl {
   }
 
   def onException[A, B](io: => IO[A])(what: => IO[B]): IO[A] =
-    try {io} catch {case e: Throwable => what.flatMap(_ => throw new Exception(e))}
+    try {io}
+    catch {
+      case e: Throwable => what.flatMap(_ => throw new Exception(e))
+    }
 }

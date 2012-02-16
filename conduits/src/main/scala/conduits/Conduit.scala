@@ -37,6 +37,10 @@ trait ConduitInstances {
   implicit def conduitFunctor[I, F[_]](implicit M0: Monad[F]): Functor[({type l[a] = Conduit[I, F, a]})#l] = new Functor[({type l[a] = Conduit[I, F, a]})#l] {
      def map[A, B](fa: Conduit[I, F, A])(f: (A) => B): Conduit[I, F, B] = fa map f
   }
+
+  implicit def conduitResultFunctor[I, F[_]](implicit M0: Monad[F]): Functor[({type l[a] = ConduitResult[I, F, a]})#l] = new Functor[({type l[a] = ConduitResult[I, F, a]})#l] {
+     def map[A, B](fa: ConduitResult[I, F, A])(f: (A) => B): ConduitResult[I, F, B] = fa map f
+  }
 }
 
 //private[conduits] trait ConduitFunctor[I, F[_]] extends Functor[({type l[a] = Conduit[I, F, a]})#l] {

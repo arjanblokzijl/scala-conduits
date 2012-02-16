@@ -6,6 +6,14 @@ import resource._
 import scalaz.{Applicative, MonadTrans, Functor, Monad}
 import scalaz.effect.{IO, MonadIO}
 
+/**
+ * A Sink is a consumer of data.
+ * Basic examples would be a sum function (adding up a stream of numbers fed in), a file sink (which writes all incoming bytes to a file), or a socket.
+ * We push data into a sink. When the sink finishes processing, it returns some value.
+ * @tparam I the input element type that the sink consumes
+ * @tparam F The type constructor representing an effect.
+ * @tparam A The output element type a Sink produces.
+ */
 sealed trait Sink[I, F[_], A]
 case class SinkNoData[I, F[_], A](output: A) extends Sink[I, F, A]
 case class SinkData[I, F[_], A](sinkPush: SinkPush[I, F, A],
@@ -16,14 +24,8 @@ sealed trait SinkResult[I, F[_], A] {
   //pattern matching directly here gives the 'type constructor inapplicable for none' compiler error. This is solved with the latest scala dist.
   //as a temporary workaround, make map abstract and override in the subclasses.
   def map[B](f: A => B)(implicit M: Monad[F]): SinkResult[I, F, B]
-  //  def map[B](f: O => B)(implicit M: Monad[F]): SinkResult[I, F, B] = this match {
-//      case proc: Processing[I, F, B] =>
-//        Processing[I, F, B](push = i =>
-//          resourceTMonad[F].map[SinkResult[I, F, O], SinkResult[I, F, B]](proc.push(i))((r: SinkResult[I, F, O]) => r.map(f))
-//          , close = resourceTMonad[F].map[SinkResult[I, F, O], SinkResult[I, F, B]](proc.close)((r: SinkResult[I, F, O]) => r.map(f)))
-//      case d: Done[I, F, O] => Done[I, F, B](d.input, f(d.output))
-//    }
 }
+
 case class Processing[I, F[_], A](push: SinkPush[I, F, A], close: SinkClose[I, F, A]) extends SinkResult[I, F, A] {
   def map[B](f: A => B)(implicit M: Monad[F]): SinkResult[I, F, B] = Processing[I, F, B](i =>
     resourceTMonad[F].map[SinkResult[I, F, A], SinkResult[I, F, B]](push(i))((r: SinkResult[I, F, A]) => r.map(f))

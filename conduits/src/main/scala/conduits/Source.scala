@@ -2,6 +2,7 @@ package conduits
 
 import resource._
 import scalaz.{Monoid, Functor, Monad}
+import sinks._
 
 /**
  * User: arjan
@@ -25,6 +26,8 @@ case class Source[F[_], A](sourcePull: ResourceT[F, SourceResult[F, A]],
     val c = this.sourceClose
     Source(resourceTMonad[F].map[SourceResult[F, A], SourceResult[F, B]](p)(r => r.map(f)), c)
   }
+
+  def >>== [B](sink: Sink[A, F, B])(implicit R: Resource[F]): ResourceT[F, B] = Conduits.normalConnect(this, sink)
 }
 
 trait SourceInstances {

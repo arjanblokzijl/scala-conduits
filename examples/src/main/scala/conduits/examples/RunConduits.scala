@@ -1,11 +1,15 @@
 package conduits
 package examples
 
-import scalaz.effect.ST._
+import scalaz.effect.IO
+import resource._
+import hasRefs._
 object RunConduits extends App {
+  val sink = CL.sumSink[IO]
+  val source = CL.sourceList[IO, Int]((1 to 10).toStream)
 
-//  sum' :: [Int] -> Int
-//  sum' input = runST $ runResourceT $ CL.sourceList input $$ sumSink
-//  CL.sumSink
-  println("TODO")
+  val rt = source >>== sink
+  val runRt: IO[Int] = runResourceT(rt)
+
+  println("result " + runRt.unsafePerformIO)
 }

@@ -15,7 +15,6 @@ case class Conduit[I, F[_], A](conduitPush: ConduitPush[I, F, A],
     Conduit[I, F, B]((i: I) => resourceTMonad[F].map[ConduitResult[I, F, A], ConduitResult[I, F, B]](conduitPush(i))((r: ConduitResult[I, F, A]) => r.map[B](f)),
       resourceTMonad[F].map[Stream[A], Stream[B]](c)(r => r.map(f)))
   }
-
 }
 
 sealed trait ConduitResult[I, F[_], A] {

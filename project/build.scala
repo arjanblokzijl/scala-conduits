@@ -8,7 +8,7 @@ object ScalaConduitsBuild extends Build {
     id = "scala-conduits",
     base = file("."),
     settings = standardSettings,
-    aggregate = Seq(conduits)
+    aggregate = Seq(conduits, examples)
   )
 
   lazy val conduits = Project(
@@ -17,6 +17,13 @@ object ScalaConduitsBuild extends Build {
     settings = standardSettings ++ Seq(
       libraryDependencies ++= Seq(Dependencies.scalaz, Dependencies.scalazEffect, Dependencies.ScalaCheck, Dependencies.Specs)
     )
+  )
+
+  lazy val examples = Project(
+    id = "conduits-examples",
+    base = file("examples"),
+    dependencies = Seq[ClasspathDep[ProjectReference]](conduits),
+    settings = standardSettings
   )
 
   lazy val standardSettings = Defaults.defaultSettings ++ Seq(

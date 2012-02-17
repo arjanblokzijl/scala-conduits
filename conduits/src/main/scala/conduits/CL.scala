@@ -26,7 +26,7 @@ object CL {
     sinkState[B, A, F, B](z, push, close)
   }
 
-  def sum[F[_]](implicit R: Resource[F]): Sink[Int, F, Int] = foldLeft((0: Int))(_ + _)
+  def sumSink[F[_]](implicit R: Resource[F]): Sink[Int, F, Int] = foldLeft((0: Int))(_ + _)
 
   /**
    * Takes a number of values from the data stream and returns a the elements as a [[scala.collection.immutable.Stream]].

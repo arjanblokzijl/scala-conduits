@@ -1,6 +1,5 @@
 package conduits
 
-
 /**
  *
  * List like operations for conduits.
@@ -8,6 +7,14 @@ package conduits
 object CL {
   import SinkUtil._
   import resource._
+
+  def fold[F[_], A, B](z: => B)(f: B => A => B)(implicit R: Resource[F]): Sink[A, F, B] = {
+    implicit val M = R.F
+    implicit val rtm = resourceTMonad[F]
+    def push: B => (=> A) => ResourceT[F, SinkStateResult[B, A, B]] = acc => input => rtm.point(StateProcessing(f(acc)(input)))
+    def close: B => ResourceT[F, B] = acc => rtm.point(acc)
+    sinkState[B, A, F, B](z, push, close)
+  }
 
   /**
    * Takes a number of values from the data stream and returns a the elements as a [[scala.collection.immutable.Stream]].

@@ -6,6 +6,7 @@ package conduits
  */
 object CL {
   import SinkUtil._
+  import SourceUtil._
   import resource._
 
   /**
@@ -49,4 +50,15 @@ object CL {
     def close: St => ResourceT[F, Stream[A]] = st => rtm.point(st._2(Stream.empty[A]))
     sinkState[St, A, F, Stream[A]]((n, identity _), push, close)
   }
+
+  def sourceList[F[_], A](l: Stream[A])(implicit R: Resource[F]): Source[F, A] = {
+    implicit val M = R.F
+    implicit val rtm = resourceTMonad[F]
+    def go(l1: Stream[A]): ResourceT[F, SourceStateResult[Stream[A], A]] = l1 match {
+      case Stream.Empty => rtm.point(StateClosed())
+      case x #:: xs =>  rtm.point(StateOpen(xs, x))
+    }
+    sourceState[Stream[A], F, A](l, (s: Stream[A]) => go(s))
+  }
+
 }

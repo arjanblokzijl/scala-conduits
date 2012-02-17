@@ -5,12 +5,6 @@ import scalaz.Monad
 /**
  * User: arjan
  */
-
-//-- Since 0.2.0
-//data SinkStateResult state input output =
-//    StateDone (Maybe input) output
-//  | StateProcessing state
-
 trait SinkStateResult[S, I, A]
 case class StateDone[S, I, A](maybeInput: Option[I], output: A) extends SinkStateResult[S, I, A]
 case class StateProcessing[S, I, A](state: S) extends SinkStateResult[S, I, A]

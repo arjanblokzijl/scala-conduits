@@ -7,10 +7,17 @@ import scalaz.{Kleisli, Monad}
 import scalaz.Kleisli._
 import scalaz.MonadTrans
 
+
+/**
+ * A Monad with a container that has mutable references.
+ * It allows some way to run base actions and clean up properly
+ * @tparam F the parameter representing some effect. Normally the [[scalaz.effect.IO]] or [[scalaz.effect.ST]] monad.
+ */
 trait Resource[F[_]] {
   implicit def F: Monad[F]
   implicit val H: HasRef[F]
 
+  //TODO add Dep implicit here to enforce constraint?
   def resourceLiftBase[A](base: F[A]): F[A]
   def resourceLiftBracket[A](init: F[Unit], cleanup: F[Unit], body: F[A]): F[A]
 }

@@ -19,6 +19,14 @@ object ScalaConduitsBuild extends Build {
     )
   )
 
+//  lazy val conduits = Project(
+//    id = "conduits",
+//    base = file("conduits"),
+//    settings = standardSettings ++ Seq(
+//      libraryDependencies ++= Seq(Dependencies.scalaz, Dependencies.scalazEffect, Dependencies.ScalaCheck, Dependencies.Specs)
+//    )
+//  )
+
   lazy val examples = Project(
     id = "conduits-examples",
     base = file("examples"),

@@ -1,8 +1,8 @@
 package conduits
 
 /**
- * User: arjan
- */
+* User: arjan
+*/
 
 import conduits._
 import scalaz.{Functor, Monad}

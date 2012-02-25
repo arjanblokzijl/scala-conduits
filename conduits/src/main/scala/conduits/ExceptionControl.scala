@@ -9,7 +9,7 @@ import IO.ioMonad
 
 object ExceptionControl {
 
-  def bracket[A, B, C](before: IO[A])(after: A => IO[B])(thing: A => IO[C]): IO[C] = {
+  def bracket[A, B, C](before: IO[A], after: A => IO[B], thing: A => IO[C]): IO[C] = {
     mask(restore => {
       ioMonad.bind(before)(a =>
           ioMonad.bind(restore(onException(thing(a))(after(a))))(r =>
@@ -18,6 +18,21 @@ object ExceptionControl {
         )
     })
   }
+
+//  bracket_ :: IO a -> IO b -> IO c -> IO c
+//  bracket_ before after thing = bracket before (const after) (const thing)
+
+  def bracket_[A, B, C](before: IO[A], after: IO[B], thing: IO[C]): IO[C] =
+     bracket[A, B, C](before, _ => after, _ => thing)
+//  def bracket_[A, B, C](before: IO[A], after: IO[B], thing: IO[C]): IO[C] = {
+//    mask(restore => {
+//      ioMonad.bind(before)(a =>
+//          ioMonad.bind(restore(onException(thing(a))(after(a))))(r =>
+//              ioMonad.bind(after(a))(_ => ioMonad.point(r))
+//          )
+//        )
+//    })
+//  }
 
   def mask[A](action: (IO[A] => IO[A]) => IO[A]): IO[A] = {
     def restore(act: IO[A]): IO[A] = act

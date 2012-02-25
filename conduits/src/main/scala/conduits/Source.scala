@@ -5,8 +5,8 @@ import scalaz.{Monoid, Functor, Monad}
 import sinks._
 
 /**
- * User: arjan
- */
+* User: arjan
+*/
 
 sealed trait SourceResult[F[_], A] {
   def map[B](f: (A) => B)(implicit M: Monad[F]): SourceResult[F, B]
@@ -27,7 +27,7 @@ case class Source[F[_], A](sourcePull: ResourceT[F, SourceResult[F, A]],
     Source(resourceTMonad[F].map[SourceResult[F, A], SourceResult[F, B]](p)(r => r.map(f)), c)
   }
 
-  def >>== [B](sink: Sink[A, F, B])(implicit R: Resource[F]): ResourceT[F, B] = Conduits.normalConnect(this, sink)
+  def >>== [B](sink: Sink[A, F, B])(implicit M: Monad[F]): ResourceT[F, B] = Conduits.normalConnect(this, sink)
 }
 
 trait SourceInstances {
@@ -39,8 +39,8 @@ trait SourceInstances {
      def map[A, B](fa: SourceResult[F, A])(f: (A) => B): SourceResult[F, B] = fa map f
   }
 
-  implicit def sourceMonoid[A, F[_]](implicit R0: Resource[F]): Monoid[Source[F, A]] = new SourceMonoid[A, F] {
-    implicit val M = R0.F
+  implicit def sourceMonoid[A, F[_]](implicit M0: Monad[F]): Monoid[Source[F, A]] = new SourceMonoid[A, F] {
+    implicit val M = M0
   }
 }
 

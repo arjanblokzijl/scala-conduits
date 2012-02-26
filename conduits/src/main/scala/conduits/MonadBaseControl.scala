@@ -8,8 +8,8 @@ import scalaz.Monad
  * User: arjan
  */
 
-trait MonadBaseDep[F[_], G[_]] {
-  def liftBase[A](a: => F[A]): G[A]
+trait MonadBaseDep[B[_], F[_]] {
+  def liftBase[A](a: => B[A]): F[A]
 }
 
 trait MonadBaseControl[B[_], F[_]] {
@@ -30,8 +30,9 @@ trait MonadBaseControl[B[_], F[_]] {
 trait MonadBase[B[_], F[_]] {
   implicit def B: Monad[B]
   implicit def F: Monad[F]
+//  def liftBase[A](fa: => B[A]): F[A]
+//  def liftBase[A](fa: => B[A])(implicit D: MonadBaseDep[B, F]): F[A]
   def liftBase[A](fa: => B[A])(implicit D: MonadBaseDep[B, F]): F[A] = D.liftBase(fa)
-
 }
 
 //liftBaseWith ∷ (RunInBase m b → b α) → m α

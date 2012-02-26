@@ -23,10 +23,20 @@ trait ResourceTInstances {
     def point[A](a: => A) = ResourceT[F, A](kleisli(s => F0.point(a)))
   }
 
-  implicit def resourceTMonadT[F[_]](implicit F0: Monad[F]): MonadTrans[({type l[a[_], b] = ResourceT[a, b]})#l] = new MonadTrans[({type l[a[_], b] = ResourceT[a, b]})#l] {
+  implicit def resourceTMonadTrans: MonadTrans[({type l[a[_], b] = ResourceT[a, b]})#l] = new MonadTrans[({type l[a[_], b] = ResourceT[a, b]})#l] {
     implicit def apply[G[_]](implicit M: Monad[G]): Monad[({type λ[α] = ResourceT[G, α]})#λ] = resourceTMonad[G]
     def liftM[G[_], A](ga: G[A])(implicit M: Monad[G]): ResourceT[G, A] =
       ResourceT[G, A](kleisli(s => M.map(ga)(identity)))
+  }
+
+  implicit def resourceMonadBase[B[_], F[_]](implicit B0: Monad[B], F0: Monad[F]): MonadBase[B, ({type l[a] = ResourceT[F, a]})#l] = new MonadBase[B, ({type l[a] = ResourceT[F, a]})#l] {
+    implicit def B = B0
+    implicit def F = resourceTMonad[F]
+  }
+
+  implicit def resourceTBaseMonadIoDep[F[_]](implicit F: MonadIO[F]): MonadBaseDep[IO, ({type l[a] = ResourceT[F, a]})#l] = new MonadBaseDep[IO, ({type l[a] = ResourceT[F, a]})#l] {
+    implicit val B0 = ioMonad
+    def liftBase[A](a: => IO[A]) = MonadTrans[({type l[a[_], b] = ResourceT[a, b]})#l].liftM(F.liftIO(a))
   }
 }
 

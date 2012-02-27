@@ -29,21 +29,15 @@ trait ResourceTInstances {
       ResourceT[G, A](kleisli(s => M.map(ga)(identity)))
   }
 
-  implicit def resourceMonadBase[B[_], F[_]](implicit B0: Monad[B], F0: Monad[F]): MonadBase[B, ({type l[a] = ResourceT[F, a]})#l] = new MonadBase[B, ({type l[a] = ResourceT[F, a]})#l] {
-    implicit def B = B0
-    implicit def F = resourceTMonad[F]
-  }
+  implicit def resourceTMonadBaseIo = new MonadBase[IO, IO] {
+    implicit def B: Monad[IO] = ioMonad
+    implicit def F: Monad[IO] = ioMonad
+    def liftBase[A](fa: => IO[A]) = fa
 
-  implicit def resourceTBaseMonadIoDep[F[_]](implicit F: MonadIO[F]): MonadBaseDep[IO, ({type l[a] = ResourceT[F, a]})#l] = new MonadBaseDep[IO, ({type l[a] = ResourceT[F, a]})#l] {
-    implicit val B0 = ioMonad
-    def liftBase[A](a: => IO[A]) = MonadTrans[({type l[a[_], b] = ResourceT[a, b]})#l].liftM(F.liftIO(a))
+    def liftBracket[A](init: IO[Unit], cleanup: IO[Unit], body: IO[A]): IO[A] = ExceptionControl.bracket_(init, cleanup, body)
   }
 }
 
-trait ResourceBaseControl[F[_]] {
-  implicit def B: MonadBaseControl[IO, F]
-  implicit def M: MonadIO[F]
-}
 
 trait ResourceTFunctions {
   def register[F[_], G[_]](istate: IORef[ReleaseMap], rel: IO[Unit]): IO[ReleaseKey] = atomicModifyIORef(istate)((rm: ReleaseMap) => rm match {
@@ -83,21 +77,13 @@ trait ResourceTFunctions {
 
   def tryR[A](fa: IO[A]): IO[Either[Throwable, A]] = ioMonad.map(fa)(a => try {Right(a)} catch {case t: Throwable => Left(t)})
 
-  def runResourceT[F[_], A](rt: ResourceT[F, A])(implicit B: MonadBaseControl[IO, F], D: MonadBaseDep[IO, F]): F[A] = {
+  def runResourceT[F[_], A](rt: ResourceT[F, A])(implicit B: MonadBase[IO, F]): F[A] = {
     val in: IO[IORef[ReleaseMap]] = IO.newIORef(ReleaseMapOpen(Int.MinValue, Int.MinValue, IntMap((Int.MinValue, ioMonad.point(())))))
-    val newRef: F[IORef[ReleaseMap]] = B.MB.liftBase(in)
+    val newRef: F[IORef[ReleaseMap]] = B.liftBase(in)
     B.F.bind(newRef)(istate => {
-      bracket_(stateAlloc(istate), stateCleanup(istate), rt.value.run(istate))
+      B.liftBracket(stateAlloc(istate), stateCleanup(istate), rt.value.run(istate))
     })
   }
-
-  def bracket_[F[_], A](alloc: IO[Unit], cleanup: IO[Unit], inside: F[A])(implicit B: MonadBaseControl[IO, F], D: MonadBaseDep[IO, F]): F[A] =
-    control[IO, F, A](run =>
-      ExceptionControl.bracket_(alloc, cleanup, run(inside)))
-
-
-  def control[B[_], F[_], A](f: (F[A] => B[A]) => B[A])(implicit B: MonadBaseControl[B, F], D: MonadBaseDep[B, F]): F[A] =
-    B.F.bind(B.liftBaseWith(f))(istate => B.restoreM(istate))
 }
 
 object resource extends ResourceTFunctions with ResourceTInstances

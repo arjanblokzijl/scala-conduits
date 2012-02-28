@@ -45,6 +45,21 @@ trait ResourceTFunctions {
     case ReleaseMapClosed => throw new InvalidAccess("register")
   })
 
+  def release(istate: IORef[ReleaseMap], rk: ReleaseKey): IO[Unit] = {
+    def lookupAction(rm: ReleaseMap) = rm match {
+      case ReleaseMapOpen(next, rf, m) => m.get(rk.key).map(action =>
+        (ReleaseMapOpen(next, rf, (m - rk.key)), Some(action))).getOrElse(rm, None)
+      case ReleaseMapClosed => throw new InvalidAccess("release")
+    }
+    ExceptionControl.mask(restore => {
+      val maction: IO[Option[IO[Unit]]] = atomicModifyIORef(istate)(lookupAction)
+      ioMonad.bind(maction)(mf => mf.map(a => restore(a)).getOrElse(ioMonad.point(())))
+    })
+  }
+
+  def maybe[A, B](b: B, f: A => B, o: Option[A]): B = o.map(x => f(x)).getOrElse(b)
+
+
   class InvalidAccess(name: String) extends RuntimeException("%s: The mutable state is being accessed after cleanup. Please contact the maintainers." format name)
 
   def atomicModifyIORef[A, B, G[_]](ref: IORef[A])(f: (A => (A, B))): IO[B] = {

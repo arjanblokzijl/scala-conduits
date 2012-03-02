@@ -8,7 +8,8 @@ object RunConduits extends App {
   val source = CL.sourceList[IO, Int]((1 to 10).toStream)
 
   val rt = source >>== sink
-  val runRt: IO[Int] = runResourceT(rt)
+//  val runRt: IO[Int] = runResourceT(rt)
 
-  println("result " + runRt.unsafePerformIO)
+//  println("result " + runRt.unsafePerformIO)
+  println("TODO")
 }

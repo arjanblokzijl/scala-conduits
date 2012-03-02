@@ -6,14 +6,13 @@ package conduits
 
 import conduits._
 import scalaz.{Functor, Monad}
-import resource._
 
 case class Conduit[I, F[_], A](conduitPush: ConduitPush[I, F, A],
                                conduitClose: ConduitClose[F, A]) {
   def map[B](f: (A) => B)(implicit M: Monad[F]): Conduit[I, F, B] = {
     val c = conduitClose
-    Conduit[I, F, B]((i: I) => resourceTMonad[F].map[ConduitResult[I, F, A], ConduitResult[I, F, B]](conduitPush(i))((r: ConduitResult[I, F, A]) => r.map[B](f)),
-      resourceTMonad[F].map[Stream[A], Stream[B]](c)(r => r.map(f)))
+    Conduit[I, F, B]((i: I) => M.map[ConduitResult[I, F, A], ConduitResult[I, F, B]](conduitPush(i))((r: ConduitResult[I, F, A]) => r.map[B](f)),
+      M.map[Stream[A], Stream[B]](c)(r => r.map(f)))
   }
 }
 
@@ -28,8 +27,8 @@ case class Finished[I, F[_], A](maybeInput: Option[I], output: Stream[A])  exten
 }
 
 trait ConduitFunctions {
-  type ConduitPush[I, F[_], A] = I => ResourceT[F, ConduitResult[I, F, A]]
-  type ConduitClose[F[_], A] = ResourceT[F, Stream[A]]
+  type ConduitPush[I, F[_], A] = I => F[ConduitResult[I, F, A]]
+  type ConduitClose[F[_], A] = F[Stream[A]]
 }
 
 trait ConduitInstances {

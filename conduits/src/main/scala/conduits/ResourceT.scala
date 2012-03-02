@@ -20,7 +20,7 @@ trait MonadResource[F[_]] {
 //       -> m (ReleaseKey, a)
 //
   implicit def MO: MonadIO[F]
-  def withR[A](a: IO[A], f: A => IO[Unit]): F[(ReleaseKey, A)]
+  def allocate[A](a: IO[A], f: A => IO[Unit]): F[(ReleaseKey, A)]
   def register(a: => IO[Unit]): F[ReleaseKey]
   def release(rk: ReleaseKey): F[Unit]
 
@@ -73,10 +73,9 @@ trait ResourceTInstances {
 
     def release(rk: ReleaseKey) = ResourceT(kleisli(istate => F0.liftIO(resource.release(istate, rk))))
 
-    def withR[A](acquire: IO[A], rel: (A) => IO[Unit]) = ResourceT(kleisli(istate =>
+    def allocate[A](acquire: IO[A], rel: (A) => IO[Unit]) = ResourceT(kleisli(istate =>
         F0.liftIO(ExceptionControl.mask[A, (ReleaseKey, A)](restore =>
-          ioMonad.bind(restore(acquire))(a => ioMonad.map(resource.register(istate, rel(a)))(key => (key, a)))))
-        ))
+          ioMonad.bind(restore(acquire))(a => ioMonad.map(resource.register(istate, rel(a)))(key => (key, a)))))))
   }
 }
 

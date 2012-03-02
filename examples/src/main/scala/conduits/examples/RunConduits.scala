@@ -7,9 +7,7 @@ object RunConduits extends App {
   val sink = CL.sumSink[IO]
   val source = CL.sourceList[IO, Int]((1 to 10).toStream)
 
-  val rt = source >>== sink
-//  val runRt: IO[Int] = runResourceT(rt)
+  val rt: IO[Int] = source >>== sink
 
-//  println("result " + runRt.unsafePerformIO)
-  println("TODO")
+  println("result " + rt.unsafePerformIO)
 }

@@ -15,26 +15,13 @@ case class ReleaseMapOpen(key: Int, refCount: Int, m: Map[Int, IO[Unit]]) extend
 case object ReleaseMapClosed extends ReleaseMap
 
 trait MonadResource[F[_]] {
-//  with :: IO a -- ^ allocate
-//       -> (a -> IO ()) -- ^ free resource
-//       -> m (ReleaseKey, a)
-//
   implicit def MO: MonadIO[F]
-  def allocate[A](a: IO[A], f: A => IO[Unit]): F[(ReleaseKey, A)]
-  def register(a: => IO[Unit]): F[ReleaseKey]
-  def release(rk: ReleaseKey): F[Unit]
 
-//  -- | Register some action that will be called precisely once, either when
-//  -- 'runResourceT' is called, or when the 'ReleaseKey' is passed to 'release'.
-//  register :: MonadIO m
-//           => IO ()
-//           -> m ReleaseKey
-//
-//  -- | Call a release action early, and deregister it from the list of cleanup
-//  -- actions to be performed.
-//  release :: MonadIO m
-//          => ReleaseKey
-//          -> m ()
+  def allocate[A](a: IO[A], f: A => IO[Unit]): F[(ReleaseKey, A)]
+
+  def register(a: => IO[Unit]): F[ReleaseKey]
+
+  def release(rk: ReleaseKey): F[Unit]
 }
 
 trait ResourceTInstances {

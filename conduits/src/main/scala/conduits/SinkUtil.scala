@@ -36,4 +36,38 @@ object SinkUtil {
 
     SinkData(push1(state), close(state))
   }
+
+//-- | Construct a 'Sink'. Note that your push and close functions need not
+//-- explicitly perform any cleanup.
+//--
+//-- Since 0.2.0
+//sinkIO :: MonadResource m
+//       => IO state -- ^ resource and/or state allocation
+//       -> (state -> IO ()) -- ^ resource and/or state cleanup
+//       -> (state -> input -> m (SinkIOResult input output)) -- ^ push
+//       -> (state -> m output) -- ^ close
+//       -> Sink input m output
+//sinkIO alloc cleanup push0 close0 = SinkData
+//    { sinkPush = \input -> do
+//        (key, state) <- allocate alloc cleanup
+//        push key state input
+//    , sinkClose = do
+//        (key, state) <- allocate alloc cleanup
+//        close key state
+//    }
+//  where
+//    push key state input = do
+//        res <- push0 state input
+//        case res of
+//            IODone a b -> do
+//                release key
+//                return $ Done a b
+//            IOProcessing -> return $ Processing
+//                (push key state)
+//                (close key state)
+//    close key state = do
+//        res <- close0 state
+//        release key
+//        return res
+//  def
 }

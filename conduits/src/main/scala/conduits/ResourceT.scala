@@ -14,6 +14,29 @@ sealed trait ReleaseMap
 case class ReleaseMapOpen(key: Int, refCount: Int, m: Map[Int, IO[Unit]]) extends ReleaseMap
 case object ReleaseMapClosed extends ReleaseMap
 
+trait MonadResource[F[_]] {
+//  with :: IO a -- ^ allocate
+//       -> (a -> IO ()) -- ^ free resource
+//       -> m (ReleaseKey, a)
+//
+  implicit def MO: MonadIO[F]
+  def withR[A](a: IO[A], f: A => IO[Unit]): F[(ReleaseKey, A)]
+  def register(a: => IO[Unit]): F[ReleaseKey]
+  def release(rk: ReleaseKey): F[Unit]
+
+//  -- | Register some action that will be called precisely once, either when
+//  -- 'runResourceT' is called, or when the 'ReleaseKey' is passed to 'release'.
+//  register :: MonadIO m
+//           => IO ()
+//           -> m ReleaseKey
+//
+//  -- | Call a release action early, and deregister it from the list of cleanup
+//  -- actions to be performed.
+//  release :: MonadIO m
+//          => ReleaseKey
+//          -> m ()
+}
+
 trait ResourceTInstances {
 
   implicit def resourceTMonad[F[_]](implicit F0: Monad[F]): Monad[({type l[a] = ResourceT[F, a]})#l] = new Monad[({type l[a] = ResourceT[F, a]})#l] {
@@ -36,11 +59,38 @@ trait ResourceTInstances {
 
     def liftBracket[A](init: IO[Unit], cleanup: IO[Unit], body: IO[A]): IO[A] = ExceptionControl.bracket_(init, cleanup, body)
   }
+
+  implicit def resourceTMonadIO[F[_]](implicit M0: MonadIO[F], M1: Monad[F]): MonadIO[({type l[a] = ResourceT[F, a]})#l] = new MonadIO[({type l[a] = ResourceT[F, a]})#l] with ResourceTMonad[F] {
+    implicit def F: Monad[F] = M1
+
+    def liftIO[A](ioa: IO[A]) = ResourceT(kleisli(_ => M0.liftIO(ioa)))
+  }
+
+  implicit def resourceTMonadResource[F[_]](implicit F0: MonadIO[F], B0: MonadBase[IO, F]): MonadResource[({type l[a] = ResourceT[F, a]})#l] = new MonadResource[({type l[a] = ResourceT[F, a]})#l] {
+   implicit def MO = resourceTMonadIO[F]
+
+    def register(rel: => IO[Unit]) = ResourceT(kleisli(istate => F0.liftIO(resource.register(istate, rel))))
+
+    def release(rk: ReleaseKey) = ResourceT(kleisli(istate => F0.liftIO(resource.release(istate, rk))))
+
+    def withR[A](acquire: IO[A], rel: (A) => IO[Unit]) = ResourceT(kleisli(istate =>
+        F0.liftIO(ExceptionControl.mask[A, (ReleaseKey, A)](restore =>
+          ioMonad.bind(restore(acquire))(a => ioMonad.map(resource.register(istate, rel(a)))(key => (key, a)))))
+        ))
+  }
+}
+
+private trait ResourceTMonad[F[_]] extends Monad[({type l[a] = ResourceT[F, a]})#l] {
+  implicit def F: Monad[F]
+  def bind[A, B](fa: ResourceT[F, A])(f: (A) => ResourceT[F, B]): ResourceT[F, B] =
+      ResourceT[F, B](kleisli(s => F.bind(fa.value.run(s))((a: A) => f(a).value.run(s))))
+
+  def point[A](a: => A) = ResourceT[F, A](kleisli(s => F.point(a)))
 }
 
 
 trait ResourceTFunctions {
-  def register[F[_], G[_]](istate: IORef[ReleaseMap], rel: IO[Unit]): IO[ReleaseKey] = atomicModifyIORef(istate)((rm: ReleaseMap) => rm match {
+  def register(istate: IORef[ReleaseMap], rel: IO[Unit]): IO[ReleaseKey] = atomicModifyIORef(istate)((rm: ReleaseMap) => rm match {
     case ReleaseMapOpen(key, rf, m) => (ReleaseMapOpen(key + 1, rf, m.updated(key, rel)), ReleaseKey(key))
     case ReleaseMapClosed => throw new InvalidAccess("register")
   })
@@ -51,7 +101,7 @@ trait ResourceTFunctions {
         (ReleaseMapOpen(next, rf, (m - rk.key)), Some(action))).getOrElse(rm, None)
       case ReleaseMapClosed => throw new InvalidAccess("release")
     }
-    ExceptionControl.mask(restore => {
+    ExceptionControl.mask[Unit, Unit](restore => {
       val maction: IO[Option[IO[Unit]]] = atomicModifyIORef(istate)(lookupAction)
       ioMonad.bind(maction)(mf => mf.map(a => restore(a)).getOrElse(ioMonad.point(())))
     })

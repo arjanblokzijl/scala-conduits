@@ -3,6 +3,8 @@ package conduits
 /**
 * User: arjan
 */
+
+import resourcet.resource
 import resource._
 import sinks.{SinkPush, SinkClose}
 import scalaz.Monad

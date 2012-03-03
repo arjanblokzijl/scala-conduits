@@ -1,17 +1,19 @@
-package conduits
+package resourcet
 
 import collection.immutable.IntMap
+import scalaz._
+import scalaz.effect._
 import scalaz.Kleisli._
 import scalaz.effect.IO.ioMonad
-import scalaz.{DList, MonadTrans, Monad, Kleisli}
-import scalaz.effect.{MonadIO, ST, IO, IORef}
 
 case class ResourceT[F[_], A](value: Kleisli[F, IORef[ReleaseMap], A])
 
 case class ReleaseKey(key: Int)
 
 sealed trait ReleaseMap
+
 case class ReleaseMapOpen(key: Int, refCount: Int, m: Map[Int, IO[Unit]]) extends ReleaseMap
+
 case object ReleaseMapClosed extends ReleaseMap
 
 trait MonadResource[F[_]] {
@@ -35,13 +37,16 @@ trait ResourceTInstances {
 
   implicit def resourceTMonadTrans: MonadTrans[({type l[a[_], b] = ResourceT[a, b]})#l] = new MonadTrans[({type l[a[_], b] = ResourceT[a, b]})#l] {
     implicit def apply[G[_]](implicit M: Monad[G]): Monad[({type λ[α] = ResourceT[G, α]})#λ] = resourceTMonad[G]
+
     def liftM[G[_], A](ga: G[A])(implicit M: Monad[G]): ResourceT[G, A] =
       ResourceT[G, A](kleisli(s => M.map(ga)(identity)))
   }
 
   implicit def resourceTMonadBaseIo = new MonadBase[IO, IO] {
     implicit def B: Monad[IO] = ioMonad
+
     implicit def F: Monad[IO] = ioMonad
+
     def liftBase[A](fa: => IO[A]) = fa
 
     def liftBracket[A](init: IO[Unit], cleanup: IO[Unit], body: IO[A]): IO[A] = ExceptionControl.bracket_(init, cleanup, body)
@@ -54,22 +59,23 @@ trait ResourceTInstances {
   }
 
   implicit def resourceTMonadResource[F[_]](implicit F0: MonadIO[F], B0: MonadBase[IO, F]): MonadResource[({type l[a] = ResourceT[F, a]})#l] = new MonadResource[({type l[a] = ResourceT[F, a]})#l] {
-   implicit def MO = resourceTMonadIO[F]
+    implicit def MO = resourceTMonadIO[F]
 
     def register(rel: => IO[Unit]) = ResourceT(kleisli(istate => F0.liftIO(resource.register(istate, rel))))
 
     def release(rk: ReleaseKey) = ResourceT(kleisli(istate => F0.liftIO(resource.release(istate, rk))))
 
     def allocate[A](acquire: IO[A], rel: (A) => IO[Unit]) = ResourceT(kleisli(istate =>
-        F0.liftIO(ExceptionControl.mask[A, (ReleaseKey, A)](restore =>
-          ioMonad.bind(restore(acquire))(a => ioMonad.map(resource.register(istate, rel(a)))(key => (key, a)))))))
+      F0.liftIO(ExceptionControl.mask[A, (ReleaseKey, A)](restore =>
+        ioMonad.bind(restore(acquire))(a => ioMonad.map(resource.register(istate, rel(a)))(key => (key, a)))))))
   }
 }
 
 private trait ResourceTMonad[F[_]] extends Monad[({type l[a] = ResourceT[F, a]})#l] {
   implicit def F: Monad[F]
+
   def bind[A, B](fa: ResourceT[F, A])(f: (A) => ResourceT[F, B]): ResourceT[F, B] =
-      ResourceT[F, B](kleisli(s => F.bind(fa.value.run(s))((a: A) => f(a).value.run(s))))
+    ResourceT[F, B](kleisli(s => F.bind(fa.value.run(s))((a: A) => f(a).value.run(s))))
 
   def point[A](a: => A) = ResourceT[F, A](kleisli(s => F.point(a)))
 }
@@ -126,7 +132,11 @@ trait ResourceTFunctions {
     }).getOrElse(ioMonad.point(())))
   }
 
-  def tryR[A](fa: IO[A]): IO[Either[Throwable, A]] = ioMonad.map(fa)(a => try {Right(a)} catch {case t: Throwable => Left(t)})
+  def tryR[A](fa: IO[A]): IO[Either[Throwable, A]] = ioMonad.map(fa)(a => try {
+    Right(a)
+  } catch {
+    case t: Throwable => Left(t)
+  })
 
   def runResourceT[F[_], A](rt: ResourceT[F, A])(implicit B: MonadBase[IO, F]): F[A] = {
     val in: IO[IORef[ReleaseMap]] = IO.newIORef(ReleaseMapOpen(Int.MinValue, Int.MinValue, IntMap((Int.MinValue, ioMonad.point(())))))

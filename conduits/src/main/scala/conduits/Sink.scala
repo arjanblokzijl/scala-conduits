@@ -1,6 +1,7 @@
 package conduits
 
 
+import resourcet.resource
 import resource._
 import scalaz.{MonadTrans, Functor, Monad}
 import scalaz.effect.{IO, MonadIO}

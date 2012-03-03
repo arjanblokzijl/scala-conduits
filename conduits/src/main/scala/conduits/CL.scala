@@ -1,6 +1,7 @@
 package conduits
 
 import scalaz.Monad
+import resourcet.resource
 
 /**
 *

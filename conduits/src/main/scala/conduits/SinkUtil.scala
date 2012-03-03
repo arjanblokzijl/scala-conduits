@@ -2,6 +2,7 @@ package conduits
 
 import scalaz.Monad
 import scalaz.effect.IO
+import resourcet.{ReleaseKey, MonadResource, resource}
 
 /**
 * User: arjan

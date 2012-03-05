@@ -2,6 +2,9 @@ package conduits
 package examples
 
 import scalaz.effect.IO
+import resourcet._
+import resource._
+//import ResourceT
 
 object RunConduits extends App {
   val sink = CL.sumSink[IO]

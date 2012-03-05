@@ -1,7 +1,8 @@
 package conduits
 
-import scalaz.Monad
 import resourcet.resource
+import scalaz.{Monoid, Monad}
+import scalaz.std.stream._
 
 /**
 *
@@ -58,4 +59,27 @@ object CL {
     sourceState[Stream[A], F, A](l, (s: Stream[A]) => go(s))
   }
 
+//  -- | Apply a transformation to all values in a stream.
+//  --
+//  -- Since 0.2.0
+//  map :: Monad m => (a -> b) -> Conduit a m b
+//  map f =
+//      Conduit push close
+//    where
+//      push i = return $ HaveMore (return $ Running push close) (return ()) (f i)
+//      close = mempty
+
+//  def map[F[_], A, B](f: A => B)(implicit M: Monad[F]): Conduit[A, F, B] = {
+//    def closeI = M.point(Stream.empty[B])
+////    def pushI(a: A): conduits.ConduitPush[A, F, B] = {
+////      val run: Running[A, F, B] = Running[A, F, B](i => pushI(a)(i), closeI(f(a)))
+////      M.point(HaveMore[A, F, B](M.point(run), M.point(), f(a)))
+////    }
+//    def pushI: conduits.ConduitPush[A, F, B] = a => {
+////      M.point(HaveMore(M.point(Running(i => push(i), close(a))), M.point(), f(a)))
+////      val run: Running[A, F, B] = Running[A, F, B](i => pushI(a)(i), closeI(f(a)))
+//      M.point(HaveMore[A, F, B](M.point(Running[A, F, B](i => pushI(i), closeI)), M.point(), f(a)))
+//    }
+//    Conduit(pushI, closeI)
+//  }
 }

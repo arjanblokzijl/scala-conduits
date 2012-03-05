@@ -19,16 +19,18 @@ case class Conduit[I, F[_], A](conduitPush: ConduitPush[I, F, A],
 sealed trait ConduitResult[I, F[_], A] {
   def map[B](f: A => B)(implicit M: Monad[F]): ConduitResult[I, F, B]
 }
-case class Producing[I, F[_], A](conduit: Conduit[I, F, A], output: Stream[A]) extends ConduitResult[I, F, A] {
-  def map[B](f: (A) => B)(implicit M: Monad[F]) = Producing(conduit map f, output.map(f))
+
+case class Running[I, F[_], A](push: ConduitPush[I, F, A], close: F[A]) extends ConduitResult[I, F, A] {
+  def map[B](f: (A) => B)(implicit M: Monad[F]) = Running(i => M.map(push(i))(p => p map f), M.map(close)(f))
 }
 case class Finished[I, F[_], A](maybeInput: Option[I], output: Stream[A])  extends ConduitResult[I, F, A] {
   def map[B](f: (A) => B)(implicit M: Monad[F]) = Finished(maybeInput, output.map(f))
 }
+case class HaveMore[I, F[_], A](pull: ConduitPull[I, F, A], close: F[Unit], output: A)  extends ConduitResult[I, F, A] {
+  def map[B](f: (A) => B)(implicit M: Monad[F]) = HaveMore(M.map(pull)(a => a.map(f)), close, f(output))
+}
 
 trait ConduitFunctions {
-  type ConduitPush[I, F[_], A] = I => F[ConduitResult[I, F, A]]
-  type ConduitClose[F[_], A] = F[Stream[A]]
 }
 
 trait ConduitInstances {
@@ -41,12 +43,9 @@ trait ConduitInstances {
   }
 }
 
-//private[conduits] trait ConduitFunctor[I, F[_]] extends Functor[({type l[a] = Conduit[I, F, a]})#l] {
-//  implicit def M: Monad[F]
-//  def map[A, B](fa: Conduit[I, F, A])(f: (A) => B): Conduit[I, F, B] = M.map(fa)((a: A) => {
-//    Conduit[I, F, B]((i: I) => resourceTMonad[F].map[ConduitResult[I, F, A], ConduitResult[I, F, B]](fa.conduitPush(i))((r: ConduitResult[I, F, A]) => r.map[B](a)),
-//      resourceTMonad[F].map[A, B](fa.conduitClose)(r => f(r)))
-//  })
-//}
 
-object conduits extends ConduitFunctions with ConduitInstances
+object conduits extends ConduitFunctions with ConduitInstances {
+  type ConduitPush[I, F[_], A] = I => F[ConduitResult[I, F, A]]
+  type ConduitClose[F[_], A] = F[Stream[A]]
+  type ConduitPull[I, F[_], A] = F[ConduitResult[I, F, A]]
+}

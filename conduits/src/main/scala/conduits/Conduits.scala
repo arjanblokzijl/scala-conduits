@@ -3,13 +3,10 @@ package conduits
 /**
 * User: arjan
 */
-
-import resourcet.resource
-import resource._
-import sinks.{SinkPush, SinkClose}
 import scalaz.Monad
 
-object Conduits {
+trait ConduitsFunctions {
+  //TODO move this to Source?
   def normalConnect[F[_], A, B](source: Source[F, A], sink: Sink[A, F, B])(implicit M: Monad[F]): F[B] = (source, sink) match {
     case (src, Done(leftover, output)) => M.map(src.sourceClose)(_ => output)
     case (src, SinkM(msink)) => M.bind(msink)(s => normalConnect(src, s))
@@ -17,5 +14,17 @@ object Conduits {
     case (Closed(), Processing(_, close)) => close
     case (Open(src, _, a), Processing(push, _)) => normalConnect(src, push(a))
   }
-
 }
+
+trait ConduitsInstances {
+  trait IsSource[F[_], A, S] {
+    def connect[B](src: S, sink: Sink[A, F, B])(implicit M: Monad[F]): F[B]
+  }
+
+  implicit def sourceIsSource[F[_], A, B](implicit M: Monad[F]): IsSource[F, A, Source[F, A]] = new IsSource[F, A, Source[F, A]] {
+    def connect[B](src: Source[F, A], sink: Sink[A, F, B])(implicit M: Monad[F]) = Conduits.normalConnect(src, sink)
+  }
+}
+
+object Conduits extends ConduitsInstances with ConduitsFunctions
+

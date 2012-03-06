@@ -14,6 +14,16 @@ sealed trait Source[F[_], A] {
     case Open(_, close, _) => close
     case SourceM(_, close) => close
   }
+
+  def append(that: Source[F, A])(implicit M: Monad[F]): Source[F, A] = {
+    def go(f1: Source[F, A], f2 : Source[F, A]): Source[F, A] = (f1, f2) match {
+      case (x, Closed()) => x
+      case (Closed(), y) => y
+      case (Open(next, close, a), y) => Open[F, A](go(next, y), close, a)
+      case (SourceM(msrc, close), y) => SourceM[F, A](M.map(msrc)(src => go(src, y)), close)
+    }
+    go(this, that)
+  }
 }
 
 case class Open[F[_], A](source: Source[F, A], close: F[Unit], a: A) extends Source[F, A] {
@@ -40,12 +50,8 @@ trait SourceInstances {
 private[conduits] trait SourceMonoid[A, F[_]] extends Monoid[Source[F, A]] {
   implicit val M: Monad[F]
 
-  def append(f1: Source[F, A], f2: => Source[F, A]): Source[F, A] = (f1, f2) match {
-    case (x, Closed()) => x
-    case (Closed(), y) => y
-    case (Open(next, close, a), y) => Open[F, A](append(next, y), close, a)
-    case (SourceM(msrc, close), y) => SourceM[F, A](M.map(msrc)(src => append(src, y)), close)
-  }
+  def append(f1: Source[F, A], f2: => Source[F, A]): Source[F, A] = f1 append f2
+
   def zero = Closed[F, A]()
 }
 

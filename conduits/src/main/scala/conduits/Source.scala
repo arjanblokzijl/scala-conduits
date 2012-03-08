@@ -8,7 +8,10 @@ import sinks._
 */
 sealed trait Source[F[_], A] {
   def map[B](f: (A) => B)(implicit M: Monad[F]): Source[F, B] //TODO move implementation here
+
+  def %= [B](conduit: Conduit[A, F, B])(implicit M: Monad[F]): Source[F, B] = Conduits.normalFuseLeft(this, conduit)
   def >>== [B](sink: Sink[A, F, B])(implicit M: Monad[F]): F[B] = Conduits.normalConnect(this, sink)
+
   def sourceClose(implicit M: Monad[F]): F[Unit] = this match {
     case Closed() => M.point(())
     case Open(_, close, _) => close

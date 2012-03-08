@@ -147,4 +147,6 @@ trait ResourceTFunctions {
   }
 }
 
-object resource extends ResourceTFunctions with ResourceTInstances
+object resource extends ResourceTFunctions with ResourceTInstances {
+  type RTIO[A] = ResourceT[IO, A]
+}

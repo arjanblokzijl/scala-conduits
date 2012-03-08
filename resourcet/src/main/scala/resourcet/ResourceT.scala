@@ -26,7 +26,15 @@ trait MonadResource[F[_]] {
   def release(rk: ReleaseKey): F[Unit]
 }
 
-trait ResourceTInstances {
+trait ResourceTInstances0 {
+  implicit def resourceTMonadIO[F[_]](implicit M0: MonadIO[F], M1: Monad[F]): MonadIO[({type l[a] = ResourceT[F, a]})#l] = new MonadIO[({type l[a] = ResourceT[F, a]})#l] with ResourceTMonad[F] {
+    implicit def F: Monad[F] = M1
+
+    def liftIO[A](ioa: IO[A]) = ResourceT(kleisli(_ => M0.liftIO(ioa)))
+  }
+}
+
+trait ResourceTInstances extends ResourceTInstances0 {
 
   implicit def resourceTMonad[F[_]](implicit F0: Monad[F]): Monad[({type l[a] = ResourceT[F, a]})#l] = new Monad[({type l[a] = ResourceT[F, a]})#l] {
     def bind[A, B](fa: ResourceT[F, A])(f: (A) => ResourceT[F, B]): ResourceT[F, B] =
@@ -52,11 +60,7 @@ trait ResourceTInstances {
     def liftBracket[A](init: IO[Unit], cleanup: IO[Unit], body: IO[A]): IO[A] = ExceptionControl.bracket_(init, cleanup, body)
   }
 
-  implicit def resourceTMonadIO[F[_]](implicit M0: MonadIO[F], M1: Monad[F]): MonadIO[({type l[a] = ResourceT[F, a]})#l] = new MonadIO[({type l[a] = ResourceT[F, a]})#l] with ResourceTMonad[F] {
-    implicit def F: Monad[F] = M1
 
-    def liftIO[A](ioa: IO[A]) = ResourceT(kleisli(_ => M0.liftIO(ioa)))
-  }
 
   implicit def resourceTMonadResource[F[_]](implicit F0: MonadIO[F], B0: MonadBase[IO, F]): MonadResource[({type l[a] = ResourceT[F, a]})#l] = new MonadResource[({type l[a] = ResourceT[F, a]})#l] {
     implicit def MO = resourceTMonadIO[F]

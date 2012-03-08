@@ -3,7 +3,7 @@ package examples
 
 import scalaz.effect.IO
 import resourcet._
-import resource.{resourceTMonad, runResourceT, resourceTMonadBaseIo, RTIO}
+import resource._
 
 object RunConduits extends App {
 

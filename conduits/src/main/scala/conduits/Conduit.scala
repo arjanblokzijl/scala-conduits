@@ -7,21 +7,37 @@ package conduits
 import conduits._
 import scalaz.{Functor, Monad}
 
-sealed trait Conduit[I, F[_], A] {
-  def map[B](f: (A) => B)(implicit M: Monad[F]): Conduit[I, F, B]
+sealed trait Conduit[A, F[_], B] {
+  def map[C](f: (B) => C)(implicit M: Monad[F]): Conduit[A, F, C]
+
+  /**Right fuse, combining a conduit and a sink together into a new sink.*/
+  def =%[C](sink: Sink[B, F, C])(implicit M: Monad[F]): Sink[A, F, C] = (this, sink) match {
+    case (c, SinkM(msink)) => SinkM(M.map(msink)(s => c =% s))
+    case (c, Done(leftover, output)) => SinkM(M.map(conduitClose)(_ => Done(None, output)))
+    case (Running(push0, close), s) => Processing[A, F, C](input => push0(input) =% s, close >>== s)
+    case (Finished(mleftover), Processing(_, close)) => SinkM(M.map(close)(o => Done(mleftover, o)))
+    case (HaveMore(con, _, input), Processing(pushI, _)) => con =% pushI(input)
+  }
+
+  def conduitClose(implicit M: Monad[F]): F[Unit] = this match {
+    case Running(_, c) => c sourceClose
+    case Finished(_) => M.point(())
+    case HaveMore(_, c, _) => c
+    case ConduitM(_, c) => c
+  }
 }
 
-case class Running[I, F[_], A](push: ConduitPush[I, F, A], close: ConduitClose[F, A]) extends Conduit[I, F, A] {
-  def map[B](f: (A) => B)(implicit M: Monad[F]) = Running[I, F, B](i => push(i) map f, close map f)
+case class Running[A, F[_], B](push: ConduitPush[A, F, B], close: ConduitClose[F, B]) extends Conduit[A, F, B] {
+  def map[C](f: (B) => C)(implicit M: Monad[F]) = Running[A, F, C](i => push(i) map f, close map f)
 }
-case class Finished[I, F[_], A](maybeInput: Option[I])  extends Conduit[I, F, A] {
-  def map[B](f: (A) => B)(implicit M: Monad[F]) = Finished(maybeInput)
+case class Finished[A, F[_], B](maybeInput: Option[A])  extends Conduit[A, F, B] {
+  def map[C](f: (B) => C)(implicit M: Monad[F]) = Finished(maybeInput)
 }
-case class HaveMore[I, F[_], A](pull: ConduitPull[I, F, A], close: F[Unit], output: A) extends Conduit[I, F, A] {
-  def map[B](f: (A) => B)(implicit M: Monad[F]) = HaveMore[I, F, B](pull map f, close, f(output))
+case class HaveMore[A, F[_], B](pull: ConduitPull[A, F, B], close: F[Unit], output: B) extends Conduit[A, F, B] {
+  def map[C](f: (B) => C)(implicit M: Monad[F]) = HaveMore[A, F, C](pull map f, close, f(output))
 }
-case class ConduitM[I, F[_], A](mcon: F[Conduit[I, F, A]], close: F[Unit]) extends Conduit[I, F, A] {
-  def map[B](f: (A) => B)(implicit M: Monad[F]) = ConduitM(M.map(mcon)(c => c map f), close)
+case class ConduitM[A, F[_], B](mcon: F[Conduit[A, F, B]], close: F[Unit]) extends Conduit[A, F, B] {
+  def map[C](f: (B) => C)(implicit M: Monad[F]) = ConduitM(M.map(mcon)(c => c map f), close)
 }
 
 

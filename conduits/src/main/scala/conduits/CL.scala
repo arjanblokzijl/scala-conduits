@@ -40,15 +40,17 @@ object CL {
    * @return
    */
   def take[F[_], A](n: Int)(implicit M: Monad[F]): Sink[A, F, Stream[A]] = {
-    type St = (Int, Stream[A] => Stream[A])
-    def push: St => (=> A) => F[SinkStateResult[St, A, Stream[A]]] = st => x => {
-      val count1 = st._1 - 1
-      def front1(str: Stream[A]) = st._2(str)
-      M.point(if (count1 == 0) StateDone(None, front1(x #:: Stream.empty[A]))
-                else StateProcessing((count1, front1 _)))
+    def go(count: Int, acc: Stream[A]) = Processing(push(count, acc), M.point(acc))
+    def plus(l1: Stream[A])(l2: Stream[A]): Stream[A] = l1 append l2
+    def push(count: Int, acc: Stream[A])(x: A): Sink[A, F, Stream[A]] = {
+       if (count == 0) Done(Some(x), acc)
+       else {
+         val count1 = count - 1
+         if (count1 == 0) Done(None, plus(acc)(Stream(x)))
+         else Processing(push(count1, plus(acc)(Stream(x))), M.point(plus(acc)(Stream(x))))
+       }
     }
-    def close: St => F[Stream[A]] = st => M.point(st._2(Stream.empty[A]))
-    sinkState[St, A, F, Stream[A]]((n, identity _), push, close)
+    go(n, Stream.empty[A])
   }
 
   def sourceList[F[_], A](l: Stream[A])(implicit M: Monad[F]): Source[F, A] = {
@@ -61,7 +63,8 @@ object CL {
 
   def map[F[_], A, B](f: A => B)(implicit M: Monad[F]): Conduit[A, F, B] = {
     def close = source.sourceMonoid[B, F].zero
-    def push: conduits.ConduitPush[A, F, B] = i => HaveMore[A, F, B](Running[A, F, B](_ => push(i), close), M.point(()), f(i))
+    def push: conduits.ConduitPush[A, F, B] = i =>
+      HaveMore[A, F, B](Running[A, F, B](push, close), M.point(()), f(i))
 
     Running(push, close)
   }

@@ -7,15 +7,45 @@ import resourcet.{ReleaseKey, MonadResource, resource}
 /**
 * User: arjan
 */
-trait SinkStateResult[S, I, A]
-case class StateDone[S, I, A](maybeInput: Option[I], output: A) extends SinkStateResult[S, I, A]
-case class StateProcessing[S, I, A](state: S) extends SinkStateResult[S, I, A]
+trait SinkStateResult[S, I, A] {
+  def fold[Z](done: (=> Option[I], => A) => Z, processing: (=> S) => Z): Z
+}
 
-trait SinkIOResult[A, B]
-case class IODone[A, B](maybeInput: Option[A], output: B) extends SinkIOResult[A, B]
-case class IOProcessing[A, B]() extends SinkIOResult[A, B]
+trait SinkIOResult[A, B] {
+  def fold[Z](done: (=> Option[A], => B) => Z, processing: => Z): Z
+}
 
 object SinkUtil {
+  private[this] val ToNone: ((=> Any) => None.type) = x => None
+  private[this] val ToNone2: ((=> Any, => Any) => None.type) = (x, y) => None
+
+  object StateDone {
+    def apply[S, I, A](maybeInput: => Option[I], output: => A) = new SinkStateResult[S, I, A] {
+      def fold[Z](done: (=> Option[I], => A) => Z, processing: (=> S) => Z) = done(maybeInput, output)
+    }
+    def unapply[S, I, A](r: SinkStateResult[S, I, A]): Option[(Option[I], A)] = r.fold((i, a) => Some(i, a), ToNone)
+  }
+
+  object StateProcessing {
+    def apply[S, I, A](s: => S) = new SinkStateResult[S, I, A] {
+      def fold[Z](done: (=> Option[I], => A) => Z, processing: (=> S) => Z) = processing(s)
+    }
+    def unapply[S, I, A](r: SinkStateResult[S, I, A]): Option[S] = r.fold(ToNone2, s => Some(s))
+  }
+
+  object IODone {
+    def apply[A, B](maybeInput: => Option[A], output: => B) = new SinkIOResult[A, B] {
+      def fold[Z](done: (=> Option[A], => B) => Z, processing: => Z) = done(maybeInput, output)
+    }
+    def unapply[A, B](r: SinkIOResult[A, B]): Option[(Option[A], B)] = r.fold((a, b) => Some(a, b), None)
+  }
+
+  object IOProcessing {
+    def apply[A, B] = new SinkIOResult[A, B] {
+      def fold[Z](done: (=> Option[A], => B) => Z, processing: => Z) = processing
+    }
+    def unapply[A, B](r: SinkIOResult[A, B]): Boolean = r.fold((_,_) => false, true)
+  }
 
   import resource._
 
@@ -33,10 +63,9 @@ object SinkUtil {
    */
   def sinkState[S, I, F[_], A](state: => S, push: S => (=> I) => F[SinkStateResult[S, I, A]], close: S => F[A])(implicit M: Monad[F]): Sink[I, F, A] = {
     def push1(state1: S)(input: I): Sink[I, F, A] = SinkM(
-      M.bind(push(state1)(input))((res: SinkStateResult[S, I, A]) => res match {
-        case StateProcessing(state1) => M.point(Processing(push1(state1), close(state1)))
-        case StateDone(mleftover, output) => M.point(Done(mleftover, output))
-      }))
+      M.bind(push(state1)(input))((res: SinkStateResult[S, I, A]) =>
+         res.fold(done = (i, a) => M.point(Done(i, a)),
+         processing = s => M.point(Processing(push1(s), close(s))))))
 
     Processing(push1(state), close(state))
   }

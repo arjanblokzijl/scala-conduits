@@ -71,19 +71,17 @@ object SinkUtil {
   }
 
   //TODO reinstantiate
-//  def sinkIO[F[_], A, B, S](alloc: IO[S], cleanup: S => IO[Unit], push: S => A => F[SinkIOResult[A, B]], close: S => F[B])(implicit M0: MonadResource[F]): Sink[A, F, B] = {
-//    implicit val M = M0.MO
-//    def push1(key: ReleaseKey)(state: S)(input: A): F[SinkResult[A, F, B]] = {
-//      M.bind(push(state)(input))(res => res match {
-//        case IODone(a, b) => M.bind(M0.release(key))(_ => M.point(Done(a, b)))
-//        case IOProcessing() => M.point(Processing(push1(key)(state), close1(key)(state)))
-//      })
-//    }
-//    def close1(key: ReleaseKey)(state: S): F[B] = {
-//      M.bind(close(state))(res => M.bind(M0.release(key))(_ => M.point(res)))
-//    }
-//    SinkData(sinkPush = input =>
-//                  M.bind(M0.allocate(alloc, cleanup))((a) => push1(a._1)(a._2)(input)),
-//             sinkClose = M.bind(M0.allocate(alloc, cleanup))((a) => close1(a._1)(a._2)))
-//  }
+  def sinkIO[F[_], A, B, S](alloc: IO[S], cleanup: S => IO[Unit], push: S => A => F[SinkIOResult[A, B]], close: S => F[B])(implicit M0: MonadResource[F]): Sink[A, F, B] = {
+    implicit val M = M0.MO
+    def push1(key: => ReleaseKey)(state: => S)(input: => A): F[Sink[A, F, B]] = {
+      M.bind(push(state)(input))(res => res.fold(done = (a, b) => M.bind(M0.release(key))(_ => M.point(Done(a, b))),
+                                                 processing = M.point(Processing(i => SinkM(push1(key)(state)(i)), close1(key)(state)))))
+    }
+    def close1(key: ReleaseKey)(state: S): F[B] = {
+      M.bind(close(state))(res => M.bind(M0.release(key))(_ => M.point(res)))
+    }
+    Processing(push = input =>
+              SinkM(M.bind(M0.allocate(alloc, cleanup))(ks => push1(ks._1)(ks._2)(input))),
+             close = M.bind(M0.allocate(alloc, cleanup))((a) => close1(a._1)(a._2)))
+  }
 }

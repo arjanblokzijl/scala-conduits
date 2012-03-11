@@ -1,8 +1,8 @@
 package conduits
 
-import scalaz.Monad
 import scalaz.effect.IO
 import resourcet.{ReleaseKey, MonadResource, resource}
+import scalaz.{Forall, Monad}
 
 /**
 * User: arjan
@@ -70,7 +70,6 @@ object SinkUtil {
     Processing(push1(state), close(state))
   }
 
-  //TODO reinstantiate
   def sinkIO[F[_], A, B, S](alloc: IO[S], cleanup: S => IO[Unit], push: S => A => F[SinkIOResult[A, B]], close: S => F[B])(implicit M0: MonadResource[F]): Sink[A, F, B] = {
     implicit val M = M0.MO
     def push1(key: => ReleaseKey)(state: => S)(input: => A): F[Sink[A, F, B]] = {
@@ -83,5 +82,11 @@ object SinkUtil {
     Processing(push = input =>
               SinkM(M.bind(M0.allocate(alloc, cleanup))(ks => push1(ks._1)(ks._2)(input))),
              close = M.bind(M0.allocate(alloc, cleanup))((a) => close1(a._1)(a._2)))
+  }
+
+  def transSink[F[_], G[_], A, B](f: Forall[({type λ[A] = F[A] => G[A]})#λ], sink: Sink[A, F, B])(implicit M: Monad[F], N: Monad[G]): Sink[A, G, B] = sink match {
+    case Done(a, b) => Done(a, b)
+    case Processing(push, close) => Processing[A, G, B](i => transSink(f, push(i)), f.apply(close))
+    case SinkM(msink) => SinkM[A, G, B](f.apply(M.map(msink)(s => transSink(f, s))))
   }
 }

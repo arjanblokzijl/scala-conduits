@@ -1,6 +1,7 @@
 package conduits
 
-import scalaz.Monad
+import scalaz.{Forall, Monad}
+
 
 sealed trait SourceStateResult[S, A] {
   def fold[Z](open: (=> S, => A) => Z, closed: => Z): Z
@@ -32,5 +33,11 @@ object SourceUtil {
     def close = M.point(())
     def src(state1: => S) = SourceM(pull1(state1), close)
     src(state)
+  }
+
+  def transSource[F[_], G[_], A](f: Forall[({type λ[A] = F[A] => G[A]})#λ], source: Source[F, A])(implicit M: Monad[F], N: Monad[G]): Source[G, A] = source match {
+    case Open(next, close, output) => Open(transSource(f, next), f.apply(close), output)
+    case Closed() => Closed()
+    case SourceM(msrc, close) => SourceM[G, A](f.apply(M.map(msrc)(s => transSource(f, s))), f.apply(close))
   }
 }

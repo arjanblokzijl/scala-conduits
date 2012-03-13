@@ -6,6 +6,7 @@ package conduits
 import scalaz.Monad
 
 trait ConduitsFunctions {
+  import Source._
   //TODO move this to Source?
   def normalConnect[F[_], A, B](source: Source[F, A], sink: Sink[A, F, B])(implicit M: Monad[F]): F[B] = (source, sink) match {
     case (src, Done(leftover, output)) => M.map(src.sourceClose)(_ => output)
@@ -17,8 +18,8 @@ trait ConduitsFunctions {
 
   def normalFuseLeft[F[_], A, B](source: Source[F, A], conduit: Conduit[A, F, B])(implicit M: Monad[F]): Source[F, B] = (source, conduit) match {
     case (Closed(), Running(_, close)) => close
-    case (Closed(), Finished(_)) => Closed[F, B]()
-    case (src, Finished(_)) => SourceM(M.map(src sourceClose)(_ => Closed()), src sourceClose)
+    case (Closed(), Finished(_)) => Closed.apply[F, B]
+    case (src, Finished(_)) => SourceM(M.map(src sourceClose)(_ => Closed.apply), src sourceClose)
     case (src, HaveMore(p, close, x)) => Open[F, B](normalFuseLeft(src, p), M.bind(src.sourceClose)(_ => close), x)
     case (SourceM(msrc, closeS), c@Running(_, closeC)) => SourceM(M.map(msrc)(s => normalFuseLeft(s, c)), M.bind(closeS)(_ => (closeC.sourceClose)))
     case (Open(src, _, a), Running(push, _)) => normalFuseLeft(src, push(a))

@@ -16,9 +16,7 @@ trait SinkIOResult[A, B] {
 }
 
 object SinkUtil {
-  private[this] val ToNone: ((=> Any) => None.type) = x => None
-  private[this] val ToNone2: ((=> Any, => Any) => None.type) = (x, y) => None
-
+  import Folds._
   object StateDone {
     def apply[S, I, A](maybeInput: => Option[I], output: => A) = new SinkStateResult[S, I, A] {
       def fold[Z](done: (=> Option[I], => A) => Z, processing: (=> S) => Z) = done(maybeInput, output)

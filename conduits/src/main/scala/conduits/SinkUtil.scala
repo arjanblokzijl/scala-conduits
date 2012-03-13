@@ -3,6 +3,7 @@ package conduits
 import scalaz.effect.IO
 import resourcet.{ReleaseKey, MonadResource, resource}
 import scalaz.{Forall, Monad}
+import Sink._
 
 /**
 * User: arjan

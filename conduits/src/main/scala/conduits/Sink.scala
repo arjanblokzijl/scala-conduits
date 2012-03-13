@@ -5,7 +5,8 @@ import resourcet.resource
 import resource._
 import scalaz.{MonadTrans, Functor, Monad}
 import scalaz.effect.{IO, MonadIO}
-
+import Sink._
+import sinks.{SinkPush, SinkClose}
 /**
  * A Sink is a consumer of data.
  * Basic examples would be a sum function (adding up a stream of numbers fed in), a file sink (which writes all incoming bytes to a file), or a socket.
@@ -15,44 +16,71 @@ import scalaz.effect.{IO, MonadIO}
  * @tparam A The output element type a Sink produces.
  */
 sealed trait Sink[I, F[_], A] {
-  def map[B](f: A => B)(implicit M: Monad[F]): Sink[I, F, B]
-  def flatMap[B](f: A => Sink[I, F, B])(implicit M: Monad[F]): Sink[I, F, B]
-  def sinkClose(implicit M: Monad[F]): F[A]
-}
 
-case class Processing[I, F[_], A](push: sinks.SinkPush[I, F, A], close: sinks.SinkClose[I, F, A]) extends Sink[I, F, A] {
-  def map[B](f: A => B)(implicit M: Monad[F]): Sink[I, F, B] = Processing[I, F, B](i =>
-    push(i) map f, M.map[A, B](close)(r => f(r)))
+  def fold[Z](processing: (=> SinkPush[I, F, A], => SinkClose[I, F, A]) => Z
+              , done: (=>  Option[I], => A) => Z
+              , sinkM: (=> F[Sink[I, F, A]]) => Z): Z
 
-  def flatMap[B](f: A => Sink[I, F, B])(implicit M: Monad[F]): Sink[I, F, B] =
-    Processing[I, F, B](i => push(i) flatMap f, M.bind(close)((cl: A) => f(cl).sinkClose))
+  def map[B](f: A => B)(implicit M: Monad[F]): Sink[I, F, B] = fold(
+    processing = (push, close) => Processing[I, F, B](i => push.apply(i) map f, M.map[A, B](close)(r => f(r)))
+    , done = (input, output) => Sink.Done(input, f(output))
+    , sinkM = msink => SinkM(M.map(msink)(s => s.map(f)))
+  )
 
-  def sinkClose(implicit M: Monad[F]) = close
-}
-
-case class Done[I, F[_], A](input: Option[I], output: A) extends Sink[I, F, A] {
-  def map[B](f: A => B)(implicit M: Monad[F]): Sink[I, F, B] = Done[I, F, B](input, f(output))
-  def flatMap[B](f: A => Sink[I, F, B])(implicit M: Monad[F]): Sink[I, F, B] = input match {
-    case None => f(output)
-    case Some(leftover) => {
-      def sinkPush(s: Sink[I, F, B]): Sink[I, F, B] = s match {
-        case Processing(push, _) => push(leftover)
-        case Done(None, o) => Done(Some(leftover), o)
-        case Done(Some(x), _) => sys.error("Sink invariant violated: leftover input returned without any push")
-        case SinkM(msink) => SinkM(M.map(msink)(s => sinkPush(s)))
+  def flatMap[B](f: A => Sink[I, F, B])(implicit M: Monad[F]): Sink[I, F, B] = fold(
+    processing = (push, close) => Processing[I, F, B](i => push.apply(i) flatMap f, M.bind(close)((cl: A) => f(cl).sinkClose))
+    , done = (input, output) => input match {
+        case None => f(output)
+        case Some(leftover) => {
+          def sinkPush(s: Sink[I, F, B]): Sink[I, F, B] = s match {
+            case Processing(push, _) => push(leftover)
+            case Done(None, o) => Done(Some(leftover), o)
+            case Done(Some(x), _) => sys.error("Sink invariant violated: leftover input returned without any push")
+            case SinkM(msink) => SinkM(M.map(msink)(s => sinkPush(s)))
+          }
+          sinkPush(f(output))
+        }
       }
-      sinkPush(f(output))
+    , sinkM = msink =>  SinkM(M.map(msink)(s => s flatMap f))
+  )
+  def sinkClose(implicit M: Monad[F]): F[A] = fold(
+    processing = (push, close) => close
+    , done = (input, output) =>  M.point(output)
+    , sinkM = msink => M.bind(msink)(s => s sinkClose)
+  )
+}
+
+object Sink {
+  import Folds._
+  object Processing {
+    def apply[I, F[_], A](push: =>  sinks.SinkPush[I, F, A], close: => sinks.SinkClose[I, F, A]) = new Sink[I, F, A] {
+      def fold[Z](processing: (=> I => Sink[I, F, A], => sinks.SinkClose[I, F, A]) => Z, done: (=> Option[I], => A) => Z, sinkM: (=> F[Sink[I, F, A]]) => Z) =
+        processing(push, close)
+    }
+    def unapply[I, F[_], A](s: Sink[I, F, A]): Option[(SinkPush[I, F, A], SinkClose[I, F, A])] = {
+      s.fold((p, c) => Some(p, c), ToNone2, ToNone)
     }
   }
-
-  def sinkClose(implicit M: Monad[F]) = M.point(output)
+  object Done {
+    def apply[I, F[_], A](input: =>  Option[I], output: => A) = new Sink[I, F, A] {
+      def fold[Z](processing: (=> I => Sink[I, F, A], => sinks.SinkClose[I, F, A]) => Z, done: (=> Option[I], => A) => Z, sinkM: (=> F[Sink[I, F, A]]) => Z) =
+        done(input, output)
+    }
+    def unapply[I, F[_], A](s: Sink[I, F, A]): Option[(Option[I], A)] = {
+      s.fold(ToNone2, (i, o) => Some(i, o), ToNone)
+    }
+  }
+  object SinkM {
+    def apply[I, F[_], A](msink: => F[Sink[I, F, A]]) = new Sink[I, F, A] {
+      def fold[Z](processing: (=> I => Sink[I, F, A], => sinks.SinkClose[I, F, A]) => Z, done: (=> Option[I], => A) => Z, sinkM: (=> F[Sink[I, F, A]]) => Z) =
+        sinkM(msink)
+    }
+    def unapply[I, F[_], A](s: Sink[I, F, A]): Option[F[Sink[I, F, A]]] = {
+      s.fold(ToNone2, ToNone2, s => Some(s))
+    }
+  }
 }
-case class SinkM[I, F[_], A](msink: F[Sink[I, F, A]]) extends Sink[I, F, A] {
-  def map[B](f: (A) => B)(implicit M: Monad[F]) = SinkM(M.map(msink)(s => s.map(f)))
-  def flatMap[B](f: A => Sink[I, F, B])(implicit M: Monad[F]): Sink[I, F, B] = SinkM(M.map(msink)(s => s flatMap f))
 
-  def sinkClose(implicit M: Monad[F]) = M.bind(msink)(s => s sinkClose)
-}
 
 trait SinkInstances {
 

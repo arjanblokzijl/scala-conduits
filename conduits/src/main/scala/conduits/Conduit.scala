@@ -6,6 +6,7 @@ package conduits
 
 import conduits._
 import scalaz.{Functor, Monad}
+import Sink._
 
 sealed trait Conduit[A, F[_], B] {
   def map[C](f: (B) => C)(implicit M: Monad[F]): Conduit[A, F, C]

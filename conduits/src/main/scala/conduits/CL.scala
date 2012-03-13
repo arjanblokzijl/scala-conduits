@@ -12,7 +12,7 @@ object CL {
   import SinkUtil._
   import SourceUtil._
   import resource._
-
+  import Sink._
   /**
    * A strict left fold.
    * @param z the starting value

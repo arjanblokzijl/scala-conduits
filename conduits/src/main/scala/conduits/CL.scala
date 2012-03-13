@@ -3,16 +3,17 @@ package conduits
 import resourcet.resource
 import scalaz.{Monoid, Monad}
 import scalaz.std.stream._
+import Sink._
+import Conduit._
 
 /**
-*
 * List like operations for conduits.
 */
 object CL {
   import SinkUtil._
   import SourceUtil._
   import resource._
-  import Sink._
+
   /**
    * A strict left fold.
    * @param z the starting value

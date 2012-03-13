@@ -7,9 +7,20 @@ package conduits
 import conduits._
 import scalaz.{Functor, Monad}
 import Sink._
+import Conduit._
 
 sealed trait Conduit[A, F[_], B] {
-  def map[C](f: (B) => C)(implicit M: Monad[F]): Conduit[A, F, C]
+  def fold[Z](running: (=> ConduitPush[A, F, B], => ConduitClose[F, B]) => Z
+              , finished: (=> Option[A]) => Z
+              , haveMore: (=> ConduitPull[A, F, B], => F[Unit], => B) => Z
+              , conduitM: (=> F[Conduit[A, F, B]], => F[Unit]) => Z): Z
+
+  def map[C](f: (B) => C)(implicit M: Monad[F]): Conduit[A, F, C] = fold(
+    running = (push, close) => Running[A, F, C](i => push.apply(i) map f, close map f)
+    , finished = i => Finished(i)
+    , haveMore = (pull, close, output) => HaveMore[A, F, C](pull map f, close, f(output))
+    , conduitM = (mcon, close) => ConduitM(M.map(mcon)(c => c map f), close)
+  )
 
   /**Right fuse, combining a conduit and a sink together into a new sink.*/
   def =%[C](sink: Sink[B, F, C])(implicit M: Monad[F]): Sink[A, F, C] = (this, sink) match {
@@ -27,18 +38,52 @@ sealed trait Conduit[A, F[_], B] {
     case ConduitM(_, c) => c
   }
 }
-
-case class Running[A, F[_], B](push: ConduitPush[A, F, B], close: ConduitClose[F, B]) extends Conduit[A, F, B] {
-  def map[C](f: (B) => C)(implicit M: Monad[F]) = Running[A, F, C](i => push(i) map f, close map f)
-}
-case class Finished[A, F[_], B](maybeInput: Option[A])  extends Conduit[A, F, B] {
-  def map[C](f: (B) => C)(implicit M: Monad[F]) = Finished(maybeInput)
-}
-case class HaveMore[A, F[_], B](pull: ConduitPull[A, F, B], close: F[Unit], output: B) extends Conduit[A, F, B] {
-  def map[C](f: (B) => C)(implicit M: Monad[F]) = HaveMore[A, F, C](pull map f, close, f(output))
-}
-case class ConduitM[A, F[_], B](mcon: F[Conduit[A, F, B]], close: F[Unit]) extends Conduit[A, F, B] {
-  def map[C](f: (B) => C)(implicit M: Monad[F]) = ConduitM(M.map(mcon)(c => c map f), close)
+object Conduit {
+  import Folds._
+  object Running {
+    def apply[A, F[_], B](push: => ConduitPush[A, F, B], close: => ConduitClose[F, B]) = new Conduit[A, F, B] {
+      def fold[Z](running: (=> ConduitPush[A, F, B], => ConduitClose[F, B]) => Z
+                    , finished: (=> Option[A]) => Z
+                    , haveMore: (=> ConduitPull[A, F, B], => F[Unit], => B) => Z
+                    , conduitM: (=> F[Conduit[A, F, B]], => F[Unit]) => Z) = running(push, close)
+    }
+    def unapply[A, F[_], B](conduit: Conduit[A, F, B]): Option[(ConduitPush[A, F, B],  ConduitClose[F, B])] = {
+      conduit fold((push, close) => Some(push, close), ToNone1, ToNone3, ToNone2)
+    }
+  }
+  object Finished {
+    def apply[A, F[_], B](maybeInput: => Option[A]) = new Conduit[A, F, B] {
+      def fold[Z](running: (=> ConduitPush[A, F, B], => ConduitClose[F, B]) => Z
+                    , finished: (=> Option[A]) => Z
+                    , haveMore: (=> ConduitPull[A, F, B], => F[Unit], => B) => Z
+                    , conduitM: (=> F[Conduit[A, F, B]], => F[Unit]) => Z) = finished(maybeInput)
+    }
+    def unapply[A, F[_], B](conduit: Conduit[A, F, B]): Option[Option[A]] = {
+      conduit fold(ToNone2, Some(_), ToNone3, ToNone2)
+    }
+  }
+  object HaveMore {
+    def apply[A, F[_], B](pull: => ConduitPull[A, F, B], close: => F[Unit], output: => B) = new Conduit[A, F, B] {
+      def fold[Z](running: (=> ConduitPush[A, F, B], => ConduitClose[F, B]) => Z
+                    , finished: (=> Option[A]) => Z
+                    , haveMore: (=> ConduitPull[A, F, B], => F[Unit], => B) => Z
+                    , conduitM: (=> F[Conduit[A, F, B]], => F[Unit]) => Z) = haveMore(pull, close, output)
+    }
+    def unapply[A, F[_], B](conduit: Conduit[A, F, B]): Option[(ConduitPull[A, F, B], F[Unit], B)] = {
+      conduit fold(ToNone2, ToNone1, (p, c, o) => Some(p, c, o), ToNone2)
+    }
+  }
+  object ConduitM {
+    def apply[A, F[_], B](mcon: => F[Conduit[A, F, B]], close: => F[Unit]) = new Conduit[A, F, B] {
+      def fold[Z](running: (=> ConduitPush[A, F, B], => ConduitClose[F, B]) => Z
+                    , finished: (=> Option[A]) => Z
+                    , haveMore: (=> ConduitPull[A, F, B], => F[Unit], => B) => Z
+                    , conduitM: (=> F[Conduit[A, F, B]], => F[Unit]) => Z) = conduitM(mcon, close)
+    }
+    def unapply[A, F[_], B](conduit: Conduit[A, F, B]): Option[(F[Conduit[A, F, B]], F[Unit])] = {
+      conduit fold(ToNone2, ToNone1, ToNone3, (mcon, close) => Some(mcon, close))
+    }
+  }
 }
 
 

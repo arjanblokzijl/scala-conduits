@@ -5,6 +5,7 @@ package conduits
 */
 import scalaz.Monad
 import Sink._
+import Conduit._
 
 trait ConduitsFunctions {
   import Source._

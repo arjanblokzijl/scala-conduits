@@ -1,10 +1,16 @@
 package conduits
 
 import scalaz.{Forall, Monad}
+import scalaz.effect.IO
+import resourcet.{ReleaseKey, MonadResource}
 
 
 sealed trait SourceStateResult[S, A] {
   def fold[Z](open: (=> S, => A) => Z, closed: => Z): Z
+}
+
+trait SourceIOResult[B] {
+  def fold[Z](ioOpen: (=> B) => Z, ioClosed: => Z): Z
 }
 
 object SourceUtil {
@@ -40,5 +46,17 @@ object SourceUtil {
     case Open(next, close, output) => Open(transSource(f, next), f.apply(close), output)
     case Closed() => Closed.apply[G, A]
     case SourceM(msrc, close) => SourceM[G, A](f.apply(M.map(msrc)(s => transSource(f, s))), f.apply(close))
+  }
+
+  def sourceIO[F[_], A, B, S](alloc: IO[S], cleanup: S => IO[Unit], pull: S => F[SourceIOResult[B]])(implicit M0: MonadResource[F]): Source[F, B] = {
+    implicit val M = M0.MO
+    def src(key: => ReleaseKey, state: => S): Source[F, B] = SourceM(pull1(key)(state), M0.release(key))
+    def pull1(key: => ReleaseKey)(state: => S): F[Source[F, B]] = {
+      M.bind(pull(state))((res: SourceIOResult[B]) => res.fold(
+         ioOpen = b => M.point(Open.apply(src(key, state), M0.release(key), b))
+         , ioClosed = M.bind(M0.release(key))(_ => M.point(Closed.apply[F, B]))))
+    }
+    SourceM(msrc = M.bind(M0.allocate(alloc, cleanup))(ks => pull1(ks._1)(ks._2)),
+            c = M.point(()))
   }
 }

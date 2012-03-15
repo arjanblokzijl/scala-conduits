@@ -1,10 +1,10 @@
 package conduits
 
 import resourcet.resource
-import scalaz.{Monoid, Monad}
 import scalaz.std.stream._
 import Sink._
 import Conduit._
+import scalaz._
 
 /**
 * List like operations for conduits.
@@ -41,17 +41,37 @@ object CL {
    * @return
    */
   def take[F[_], A](n: Int)(implicit M: Monad[F]): Sink[A, F, Stream[A]] = {
+    def app[A](l1: Stream[A], l2: Stream[A]): Stream[A] = l1 append l2
     def go(count: Int, acc: Stream[A]) = Processing(push(count, acc), M.point(acc))
-    def plus(l1: Stream[A])(l2: Stream[A]): Stream[A] = l1 append l2
     def push(count: Int, acc: Stream[A])(x: A): Sink[A, F, Stream[A]] = {
        if (count == 0) Done(Some(x), acc)
        else {
          val count1 = count - 1
-         if (count1 == 0) Done(None, plus(acc)(Stream(x)))
-         else Processing(push(count1, plus(acc)(Stream(x))), M.point(plus(acc)(Stream(x))))
+         if (count1 == 0) Done(None, app(acc, Stream(x)))
+         else Processing(push(count1, app(acc, Stream(x))), M.point(app(acc, Stream(x))))
        }
     }
     go(n, Stream.empty[A])
+  }
+
+  //TODO check whether this makes sense
+  def takeM[F[_], A](n: Int)(implicit P: Pointed[F], MO: Monoid[F[A]]): Sink[A, F, F[A]] = {
+    def go(count: Int, acc: F[A]) = Processing(push(count, acc), P.point(acc))
+    def push(count: Int, acc: F[A])(x: A): Sink[A, F, F[A]] = {
+       if (count == 0) Done(Some(x), acc)
+       else {
+         val count1 = count - 1
+         if (count1 == 0) Done(None, MO.append(acc, P.point(x)))
+         else Processing(push(count1, MO.append(acc, P.point(x))), P.point(MO.append(acc, P.point(x))))
+       }
+    }
+    go(n, MO.zero)
+  }
+
+  def consumeM[F[_], A](implicit P: Pointed[F], MO: Monoid[F[A]]): Sink[A, F, F[A]] = {
+    def go(acc: F[A]): Sink[A, F, F[A]] = Processing(push(acc), P.point(MO.append(acc, MO.zero)))
+    def push(acc: F[A])(x: A): Sink[A, F, F[A]] = go(MO.append(acc, P.point(x)))
+    go(MO.zero)
   }
 
   def sourceList[F[_], A](l: => Stream[A])(implicit M: Monad[F]): Source[F, A] = {

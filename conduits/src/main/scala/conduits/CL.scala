@@ -41,7 +41,7 @@ object CL {
    * @return
    */
   def take[F[_], A](n: Int)(implicit M: Monad[F]): Sink[A, F, Stream[A]] = {
-    def app[A](l1: Stream[A], l2: Stream[A]): Stream[A] = l1 append l2
+    def app[A](l1: Stream[A], l2: => Stream[A]): Stream[A] = streamInstance.plus(l1, l2)
     def go(count: Int, acc: Stream[A]) = Processing(push(count, acc), M.point(acc))
     def push(count: Int, acc: Stream[A])(x: A): Sink[A, F, Stream[A]] = {
        if (count == 0) Done(Some(x), acc)
@@ -54,24 +54,10 @@ object CL {
     go(n, Stream.empty[A])
   }
 
-  //TODO check whether this makes sense
-  def takeM[F[_], A](n: Int)(implicit P: Pointed[F], MO: Monoid[F[A]]): Sink[A, F, F[A]] = {
-    def go(count: Int, acc: F[A]) = Processing(push(count, acc), P.point(acc))
-    def push(count: Int, acc: F[A])(x: A): Sink[A, F, F[A]] = {
-       if (count == 0) Done(Some(x), acc)
-       else {
-         val count1 = count - 1
-         if (count1 == 0) Done(None, MO.append(acc, P.point(x)))
-         else Processing(push(count1, MO.append(acc, P.point(x))), P.point(MO.append(acc, P.point(x))))
-       }
-    }
-    go(n, MO.zero)
-  }
-
-  def consumeM[F[_], A](implicit P: Pointed[F], MO: Monoid[F[A]]): Sink[A, F, F[A]] = {
-    def go(acc: F[A]): Sink[A, F, F[A]] = Processing(push(acc), P.point(MO.append(acc, MO.zero)))
-    def push(acc: F[A])(x: A): Sink[A, F, F[A]] = go(MO.append(acc, P.point(x)))
-    go(MO.zero)
+  def consume[F[_], A](implicit M: Monad[F]): Sink[A, F, Stream[A]] = {
+    def go(acc: Stream[A]): Sink[A, F, Stream[A]] = Processing(push(acc), M.point(acc))
+    def push(acc: Stream[A])(x: A): Sink[A, F, Stream[A]] = go(streamInstance.plus(acc, Stream(x)))
+    go(Stream.empty[A])
   }
 
   def sourceList[F[_], A](l: => Stream[A])(implicit M: Monad[F]): Source[F, A] = {

@@ -24,4 +24,4 @@
 //}
 
 
-//TODO specs2 doesn't seem to work with Scala 2.10?
+//TODO specs2 doesn't work with Scala 2.10?

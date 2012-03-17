@@ -34,6 +34,10 @@ object SourceUtil {
       s.fold((_,_) => false, true)
   }
 
+  /**
+   * Construct a 'Source' with some stateful functions. This function addresses
+   * threading the state value for you.
+   */
   def sourceState[S, F[_], A](state: => S, pull: (S => F[SourceStateResult[S, A]]))(implicit M: Monad[F]): Source[F, A] = {
     def pull1(state: => S): F[Source[F, A]] =
       M.bind(pull(state))(res => res.fold(open = (s, o) => M.point(Open(src(s), close, o)), closed = M.point(Closed.apply)))
@@ -42,12 +46,21 @@ object SourceUtil {
     src(state)
   }
 
-  def transSource[F[_], G[_], A](f: Forall[({type λ[A] = F[A] => G[A]})#λ], source: Source[F, A])(implicit M: Monad[F], N: Monad[G]): Source[G, A] = source match {
-    case Open(next, close, output) => Open(transSource(f, next), f.apply(close), output)
-    case Closed() => Closed.apply[G, A]
-    case SourceM(msrc, close) => SourceM[G, A](f.apply(M.map(msrc)(s => transSource(f, s))), f.apply(close))
+  /**A combination of sourceState and sourceIO*/
+  def sourceStateIO[S, F[_], A, B](alloc: => IO[S], cleanup: (S => IO[Unit]), pull: S => F[SourceStateResult[S, B]])(implicit M0: MonadResource[F]): Source[F, B] = {
+    implicit val M = M0.MO
+    def src(key: => ReleaseKey, state: => S): Source[F, B] = SourceM(pull1(key)(state), M0.release(key))
+    def pull1(key: => ReleaseKey)(state: => S): F[Source[F, B]] = {
+      M.bind(pull(state))(res => res.fold(
+         open = (s, o) => M.point(Open(src(key, s), M0.release(key), o))
+         , closed = M.bind(M0.release(key))(_ => M.point(Closed.apply[F, B]))))
+    }
+    SourceM(msrc = M.bind(M0.allocate(alloc, cleanup))(ks => pull1(ks._1)(ks._2)),
+            c = M.point(()))
   }
 
+
+  /**Constructs a 'Source' based on some IO actions for alloc/release.*/
   def sourceIO[F[_], A, B, S](alloc: IO[S], cleanup: S => IO[Unit], pull: S => F[SourceIOResult[B]])(implicit M0: MonadResource[F]): Source[F, B] = {
     implicit val M = M0.MO
     def src(key: => ReleaseKey, state: => S): Source[F, B] = SourceM(pull1(key)(state), M0.release(key))
@@ -58,5 +71,18 @@ object SourceUtil {
     }
     SourceM(msrc = M.bind(M0.allocate(alloc, cleanup))(ks => pull1(ks._1)(ks._2)),
             c = M.point(()))
+  }
+
+  /**
+   * Transform the monad a 'Source' lives in.
+   *
+   * Note that this will /not/ thread the individual monads together, meaning
+   * side effects will be lost. This function is most useful for transformers
+   * only providing context and not producing side-effects.
+   */
+  def transSource[F[_], G[_], A](f: Forall[({type λ[A] = F[A] => G[A]})#λ], source: Source[F, A])(implicit M: Monad[F], N: Monad[G]): Source[G, A] = source match {
+    case Open(next, close, output) => Open(transSource(f, next), f.apply(close), output)
+    case Closed() => Closed.apply[G, A]
+    case SourceM(msrc, close) => SourceM[G, A](f.apply(M.map(msrc)(s => transSource(f, s))), f.apply(close))
   }
 }

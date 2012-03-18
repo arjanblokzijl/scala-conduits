@@ -30,7 +30,7 @@ object ConduitUtil {
    * Construct a 'Conduit' with some stateful functions. This function addresses
    * threading the state value for you.
    */
-  def conduitState[S, A, F[_], B](state: => S, push: S => (=> A) => F[ConduitStateResult[S, A, B]], close: S => F[Stream[B]])(implicit M: Monad[F]): Conduit[A, F, B] = {
+  def conduitState[S, A, F[_], B](state: => S, push: (=> S) => (=> A) => F[ConduitStateResult[S, A, B]], close: (=> S) => F[Stream[B]])(implicit M: Monad[F]): Conduit[A, F, B] = {
     def push1(state1: S)(input: A): Conduit[A, F, B] = ConduitM(
       M.map(push(state)(input))(r => goRes(r))
       , M.point(()))

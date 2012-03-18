@@ -8,7 +8,7 @@ object ScalaConduitsBuild extends Build {
     id = "scala-conduits",
     base = file("."),
     settings = standardSettings,
-    aggregate = Seq(conduits, examples)
+    aggregate = Seq(resourcet, conduits, examples)
   )
 
   lazy val conduits = Project(
@@ -36,13 +36,14 @@ object ScalaConduitsBuild extends Build {
   )
 
   lazy val standardSettings = Defaults.defaultSettings ++ Seq(
-    organization := "org.ulysses.data",
+    organization := "com.github.ab",
     version := "0.1-SNAPSHOT",
-//    scalaVersion := "2.9.1",
-    scalaVersion := "2.10.0-M2",
+    scalaVersion := "2.9.1",
+//    scalaVersion := "2.10.0-M2",
     crossPaths := false,
     scalacOptions  ++= Seq("-encoding", "UTF-8", "-deprecation", "-unchecked"),
-    resolvers += ScalaToolsSnapshots
+    resolvers ++= Seq("releases" at "http://oss.sonatype.org/content/repositories/releases",
+                        "snapshots" at "http://oss.sonatype.org/content/repositories/snapshots")
   )
 
   object Dependencies {

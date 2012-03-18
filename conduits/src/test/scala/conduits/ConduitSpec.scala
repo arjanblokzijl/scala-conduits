@@ -6,25 +6,22 @@ import std.anyVal._
 import effect.IO
 import effect.IO._
 import scalaz.Id
+import org.scalacheck.Arbitrary._
 
 import CL._
+import org.specs2.ScalaCheck
 
 /**
 * User: arjan
 */
-class ConduitSpec extends Specification {
-  val source = CL.sourceList[Id, Int]((1 to 20).toStream)
-  val sinkTake = CL.take[Id, Int](10)
+class ConduitSpec extends Specification with ScalaCheck {
 
-  "take" should {
-    "consume the given number of elements" in {
-      (source >>== sinkTake) mustEqual(Stream.from(1).take(10))
-    }
+  "takes the given number of elements" ! check {(stream: Stream[Int], n: Int) =>
+    (sourceList[Id, Int](stream) >>== take(n)) mustEqual(stream.take(n))
   }
-  "consume" should {
-    "consume all elements in the source" in {
-      (source >>== consume) mustEqual(Stream.from(1).take(20))
-    }
+
+  "consume all elements" ! check {(stream: Stream[Int]) =>
+    (sourceList[Id, Int](stream) >>== consume) mustEqual(stream)
   }
 }
 

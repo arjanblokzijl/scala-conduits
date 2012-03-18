@@ -44,10 +44,10 @@ object CL {
     def app[A](l1: Stream[A], l2: => Stream[A]): Stream[A] = streamInstance.plus(l1, l2)
     def go(count: Int, acc: Stream[A]) = Processing(push(count, acc), M.point(acc))
     def push(count: Int, acc: Stream[A])(x: A): Sink[A, F, Stream[A]] = {
-       if (count == 0) Done(Some(x), acc)
+       if (count <= 0) Done(Some(x), acc)
        else {
          val count1 = count - 1
-         if (count1 == 0) Done(None, app(acc, Stream(x)))
+         if (count1 <= 0) Done(None, app(acc, Stream(x)))
          else Processing(push(count1, app(acc, Stream(x))), M.point(app(acc, Stream(x))))
        }
     }

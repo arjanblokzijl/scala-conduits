@@ -32,6 +32,14 @@ object CL {
 
   def sumSink[F[_]](implicit M: Monad[F]): Sink[Int, F, Int] = foldLeft((0: Int))(_ + _)
 
+  /**Take a single value from the stream, if available.*/
+  def head[F[_], A](implicit M: Monad[F]): Sink[A, F, Option[A]] =
+    Processing[A, F, Option[A]](a =>  Done(None, Some(a)), M.point[Option[A]](None))
+
+  /**Look at the next value of the stream, if available. This does not alter the content of the stream*/
+  def peek[F[_], A](implicit M: Monad[F]): Sink[A, F, Option[A]] =
+    Processing[A, F, Option[A]](a => Done(Some(a), Some(a)), M.point[Option[A]](None))
+
   /**
    * Takes a number of values from the data stream and returns a the elements as a [[scala.collection.immutable.Stream]].
    * @param n the number of elements to return

@@ -86,9 +86,9 @@ object ConduitUtil {
         ))))
 
     }
-    def close1(key: ReleaseKey, state: S): Source[F, B] = {
+    def close1(key: ReleaseKey, state: S): Source[F, B] =
       SourceM(M.bind(close(state))(output => M.bind(M0.release(key))(_ => M.point(fromList(output)))), M0.release(key))
-    }
+
     Running(push = input =>
               ConduitM(M.bind(M0.allocate(alloc, cleanup))(ks =>
                 push1(ks._1, ks._2, input)), M.point(())),

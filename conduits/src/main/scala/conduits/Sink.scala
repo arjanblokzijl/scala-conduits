@@ -17,7 +17,7 @@ import sinks.{SinkPush, SinkClose}
  */
 sealed trait Sink[I, F[_], A] {
 
-  def fold[Z](processing: (=> SinkPush[I, F, A], => SinkClose[I, F, A]) => Z
+  def fold[Z](processing: (=> SinkPush[I, F, A], => SinkClose[F, A]) => Z
               , done: (=>  Option[I], => A) => Z
               , sinkM: (=> F[Sink[I, F, A]]) => Z): Z
 
@@ -53,17 +53,17 @@ sealed trait Sink[I, F[_], A] {
 object Sink {
   import Folds._
   object Processing {
-    def apply[I, F[_], A](push: =>  sinks.SinkPush[I, F, A], close: => sinks.SinkClose[I, F, A]) = new Sink[I, F, A] {
-      def fold[Z](processing: (=> I => Sink[I, F, A], => sinks.SinkClose[I, F, A]) => Z, done: (=> Option[I], => A) => Z, sinkM: (=> F[Sink[I, F, A]]) => Z) =
+    def apply[I, F[_], A](push: =>  sinks.SinkPush[I, F, A], close: => sinks.SinkClose[F, A]) = new Sink[I, F, A] {
+      def fold[Z](processing: (=> I => Sink[I, F, A], => sinks.SinkClose[F, A]) => Z, done: (=> Option[I], => A) => Z, sinkM: (=> F[Sink[I, F, A]]) => Z) =
         processing(push, close)
     }
-    def unapply[I, F[_], A](s: Sink[I, F, A]): Option[(SinkPush[I, F, A], SinkClose[I, F, A])] = {
+    def unapply[I, F[_], A](s: Sink[I, F, A]): Option[(SinkPush[I, F, A], SinkClose[F, A])] = {
       s.fold((p, c) => Some(p, c), ToNone2, ToNone)
     }
   }
   object Done {
     def apply[I, F[_], A](input: =>  Option[I], output: => A) = new Sink[I, F, A] {
-      def fold[Z](processing: (=> I => Sink[I, F, A], => sinks.SinkClose[I, F, A]) => Z, done: (=> Option[I], => A) => Z, sinkM: (=> F[Sink[I, F, A]]) => Z) =
+      def fold[Z](processing: (=> I => Sink[I, F, A], => sinks.SinkClose[F, A]) => Z, done: (=> Option[I], => A) => Z, sinkM: (=> F[Sink[I, F, A]]) => Z) =
         done(input, output)
     }
     def unapply[I, F[_], A](s: Sink[I, F, A]): Option[(Option[I], A)] = {
@@ -72,7 +72,7 @@ object Sink {
   }
   object SinkM {
     def apply[I, F[_], A](msink: => F[Sink[I, F, A]]) = new Sink[I, F, A] {
-      def fold[Z](processing: (=> I => Sink[I, F, A], => sinks.SinkClose[I, F, A]) => Z, done: (=> Option[I], => A) => Z, sinkM: (=> F[Sink[I, F, A]]) => Z) =
+      def fold[Z](processing: (=> I => Sink[I, F, A], => sinks.SinkClose[F, A]) => Z, done: (=> Option[I], => A) => Z, sinkM: (=> F[Sink[I, F, A]]) => Z) =
         sinkM(msink)
     }
     def unapply[I, F[_], A](s: Sink[I, F, A]): Option[F[Sink[I, F, A]]] = {
@@ -127,7 +127,7 @@ private[conduits] trait SinkMonadIO[I, F[_]] extends MonadIO[({type l[a] = Sink[
 
 trait SinkFunctions {
   type SinkPush[I, F[_], A] = I => Sink[I, F, A]
-  type SinkClose[I, F[_], A] = F[A]
+  type SinkClose[F[_], A] = F[A]
 }
 
 object sinks extends SinkFunctions with SinkInstances

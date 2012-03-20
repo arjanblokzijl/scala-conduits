@@ -26,6 +26,10 @@ class ConduitSpec extends Specification with ScalaCheck {
       (sourceList[Id, Int](stream) >>== consume) mustEqual (stream)
   }
 
+  "filter" ! check {(stream: Stream[Int]) =>
+    (sourceList[Id, Int](stream) >>== (filter[Id, Int](i => i % 2 == 0) =% consume)) mustEqual(stream.filter(i => i % 2 == 0))
+  }
+
   "head takes the first element, if available" ! check {
     (stream: Stream[Int]) =>
       (sourceList[Id, Int](stream) >>== head) mustEqual (stream.headOption)

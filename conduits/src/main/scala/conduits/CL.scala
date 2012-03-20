@@ -67,6 +67,23 @@ object CL {
     def push(acc: Stream[A])(x: A): Sink[A, F, Stream[A]] = go(streamInstance.plus(acc, Stream(x)))
     go(Stream.empty[A])
   }
+//  -- | Keep only values in the stream passing a given predicate.
+//  --
+//  -- Since 0.2.0
+//  filter :: Monad m => (a -> Bool) -> Conduit a m a
+//  filter f =
+//      Running push close
+//    where
+//      push i | f i = HaveMore (Running push close) (return ()) i
+//      push _       = Running push close
+//      close = mempty
+  def filter[F[_], A](f: A => Boolean)(implicit M: Monad[F]): Conduit[A, F, A] = {
+    def close = source.sourceMonoid[A, F].zero
+    def push: conduits.ConduitPush[A, F, A] = i =>
+      if (f(i)) HaveMore[A, F, A](Running(push, close), M.point(()), i)
+      else Running(push, close)
+    Running(push, close)
+  }
 
   def sourceList[F[_], A](l: => Stream[A])(implicit M: Monad[F]): Source[F, A] = {
     def go(l1: => Stream[A]): F[SourceStateResult[Stream[A], A]] = l1 match {

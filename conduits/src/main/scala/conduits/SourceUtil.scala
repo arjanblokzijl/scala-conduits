@@ -47,13 +47,13 @@ object SourceUtil {
   }
 
   /**A combination of sourceState and sourceIO*/
-  def sourceStateIO[S, F[_], A, B](alloc: => IO[S], cleanup: (S => IO[Unit]), pull: S => F[SourceStateResult[S, B]])(implicit M0: MonadResource[F]): Source[F, B] = {
+  def sourceStateIO[S, F[_], A](alloc: => IO[S], cleanup: (S => IO[Unit]), pull: S => F[SourceStateResult[S, A]])(implicit M0: MonadResource[F]): Source[F, A] = {
     implicit val M = M0.MO
-    def src(key: => ReleaseKey, state: => S): Source[F, B] = SourceM(pull1(key)(state), M0.release(key))
-    def pull1(key: => ReleaseKey)(state: => S): F[Source[F, B]] = {
+    def src(key: => ReleaseKey, state: => S): Source[F, A] = SourceM(pull1(key)(state), M0.release(key))
+    def pull1(key: => ReleaseKey)(state: => S): F[Source[F, A]] = {
       M.bind(pull(state))(res => res.fold(
          open = (s, o) => M.point(Open(src(key, s), M0.release(key), o))
-         , closed = M.bind(M0.release(key))(_ => M.point(Closed.apply[F, B]))))
+         , closed = M.bind(M0.release(key))(_ => M.point(Closed.apply[F, A]))))
     }
     SourceM(msrc = M.bind(M0.allocate(alloc, cleanup))(ks => pull1(ks._1)(ks._2)),
             c = M.point(()))
@@ -61,13 +61,13 @@ object SourceUtil {
 
 
   /**Constructs a 'Source' based on some IO actions for alloc/release.*/
-  def sourceIO[F[_], A, B, S](alloc: IO[S], cleanup: S => IO[Unit], pull: S => F[SourceIOResult[B]])(implicit M0: MonadResource[F]): Source[F, B] = {
+  def sourceIO[F[_], A, S](alloc: IO[S], cleanup: S => IO[Unit], pull: S => F[SourceIOResult[A]])(implicit M0: MonadResource[F]): Source[F, A] = {
     implicit val M = M0.MO
-    def src(key: => ReleaseKey, state: => S): Source[F, B] = SourceM(pull1(key)(state), M0.release(key))
-    def pull1(key: => ReleaseKey)(state: => S): F[Source[F, B]] = {
-      M.bind(pull(state))((res: SourceIOResult[B]) => res.fold(
+    def src(key: => ReleaseKey, state: => S): Source[F, A] = SourceM(pull1(key)(state), M0.release(key))
+    def pull1(key: => ReleaseKey)(state: => S): F[Source[F, A]] = {
+      M.bind(pull(state))((res: SourceIOResult[A]) => res.fold(
          ioOpen = b => M.point(Open.apply(src(key, state), M0.release(key), b))
-         , ioClosed = M.bind(M0.release(key))(_ => M.point(Closed.apply[F, B]))))
+         , ioClosed = M.bind(M0.release(key))(_ => M.point(Closed.apply[F, A]))))
     }
     SourceM(msrc = M.bind(M0.allocate(alloc, cleanup))(ks => pull1(ks._1)(ks._2)),
             c = M.point(()))

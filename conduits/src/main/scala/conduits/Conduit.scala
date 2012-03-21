@@ -39,7 +39,7 @@ sealed trait Conduit[A, F[_], B] {
   }
 }
 object Conduit {
-  import Folds._
+  import FoldUtils._
   object Running {
     def apply[A, F[_], B](push: => ConduitPush[A, F, B], close: => ConduitClose[F, B]) = new Conduit[A, F, B] {
       def fold[Z](running: (=> ConduitPush[A, F, B], => ConduitClose[F, B]) => Z

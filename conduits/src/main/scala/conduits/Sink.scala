@@ -51,7 +51,7 @@ sealed trait Sink[I, F[_], A] {
 }
 
 object Sink {
-  import Folds._
+  import FoldUtils._
   object Processing {
     def apply[I, F[_], A](push: =>  sinks.SinkPush[I, F, A], close: => sinks.SinkClose[F, A]) = new Sink[I, F, A] {
       def fold[Z](processing: (=> I => Sink[I, F, A], => sinks.SinkClose[F, A]) => Z, done: (=> Option[I], => A) => Z, sinkM: (=> F[Sink[I, F, A]]) => Z) =

@@ -37,10 +37,26 @@ sealed trait Source[F[_], A] {
     case Open(_, close, _) => close
     case SourceM(_, close) => close
   }
+
+  def zip[B](that: Source[F, B])(implicit M: Monad[F]): Source[F, (A, B)] = {
+    def go(f1: Source[F, A], f2 : Source[F, B]): Source[F, (A, B)] = (f1, f2) match {
+      case (Closed(), Closed()) => Closed.apply
+      case (Closed(), Open(_, close, _)) => SourceM[F, (A, B)](M.bind(close)(_ => M.point(Closed.apply)), close)
+      case (Open(_, close, _), Closed()) => SourceM[F, (A, B)](M.bind(close)(_ => M.point(Closed.apply)), close)
+      case (Closed(), SourceM(_, close)) => SourceM[F, (A, B)](M.bind(close)(_ => M.point(Closed.apply)), close)
+      case (SourceM(_, close), Closed()) => SourceM[F, (A, B)](M.bind(close)(_ => M.point(Closed.apply)), close)
+      case (SourceM(mx, closex), SourceM(my, closey)) => SourceM[F, (A, B)](M.map2(mx, my)((a, b) => go(a, b)), M.bind(closex)(_ => closey))
+      case (SourceM(mx, closex), y@Open(_, closey, _)) => SourceM[F, (A, B)](M.map(mx)(x => go(x, y)), M.bind(closex)(_ => closey))
+      case (x@Open(_, closex, _), SourceM(my, closey)) => SourceM[F, (A, B)](M.map(my)(y => go(x, y)), M.bind(closex)(_ => closey))
+      case (Open(srcx, closex, x),Open(srcy, closey, y)) => Open(go(srcx, srcy), M.bind(closex)(_ => closey), (x, y))
+      case _ => sys.error("")
+    }
+    go(this, that)
+  }
 }
 
 object Source {
-  import Folds._
+  import FoldUtils._
   object Open {
     def apply[F[_], A](s: => Source[F, A], c: => F[Unit], a: => A) = new Source[F, A] {
       def fold[Z](open: (=> Source[F, A], => F[Unit], => A) => Z, close: => Z, sourceM: (=> F[Source[F, A]], => F[Unit]) => Z) = open(s, c, a)

@@ -26,7 +26,7 @@ trait ConduitIOResult[A, B] {
 }
 
 object ConduitUtil {
-  import Folds._
+  import FoldUtils._
   object StateFinished {
     def apply[S, A, B](maybeInput: => Option[A], output: => Stream[B]) = new ConduitStateResult[S, A, B] {
       def fold[Z](finished: (=> Option[A], => Stream[B]) => Z, producing: (=> S, => Stream[B]) => Z) = finished(maybeInput, output)

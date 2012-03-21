@@ -17,7 +17,7 @@ trait SinkIOResult[A, B] {
 }
 
 object SinkUtil {
-  import Folds._
+  import FoldUtils._
   object StateDone {
     def apply[S, I, A](maybeInput: => Option[I], output: => A) = new SinkStateResult[S, I, A] {
       def fold[Z](done: (=> Option[I], => A) => Z, processing: (=> S) => Z) = done(maybeInput, output)

@@ -13,14 +13,6 @@ trait ConduitStateResult[S, A, B] {
   def fold[Z](finished: (=> Option[A], => Stream[B]) => Z, producing: (=> S, => Stream[B]) => Z): Z
 }
 
-//-- | A helper type for @conduitIO@, indicating the result of being pushed to.
-//-- It can either indicate that processing is done, or to continue.
-//--
-//-- Since 0.2.0
-//data ConduitIOResult input output =
-//    IOFinished (Maybe input) [output]
-//  | IOProducing [output]
-//
 trait ConduitIOResult[A, B] {
   def fold[Z](finished: (=> Option[A], => Stream[B]) => Z, producing: (=> Stream[B]) => Z): Z
 }

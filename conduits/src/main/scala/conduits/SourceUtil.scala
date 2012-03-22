@@ -9,8 +9,8 @@ sealed trait SourceStateResult[S, A] {
   def fold[Z](open: (=> S, => A) => Z, closed: => Z): Z
 }
 
-trait SourceIOResult[B] {
-  def fold[Z](ioOpen: (=> B) => Z, ioClosed: => Z): Z
+trait SourceIOResult[A] {
+  def fold[Z](ioOpen: (=> A) => Z, ioClosed: => Z): Z
 }
 
 object SourceUtil {
@@ -32,6 +32,24 @@ object SourceUtil {
 
     def unapply[S, A](s: => SourceStateResult[S, A]): Boolean =
       s.fold((_,_) => false, true)
+  }
+
+  object IOOpen {
+    def apply[A](input: => A): SourceIOResult[A] = new SourceIOResult[A] {
+      def fold[Z](ioOpen: (=> A) => Z, ioClosed: => Z) = ioOpen(input)
+    }
+
+    def unapply[A](r: => SourceIOResult[A]): Option[A] =
+      r.fold(o => Some(o), None)
+  }
+
+  object IOClosed {
+    def apply[A]: SourceIOResult[A] = new SourceIOResult[A] {
+      def fold[Z](ioOpen: (=> A) => Z, ioClosed: => Z) = ioClosed
+    }
+
+    def unapply[A](r: => SourceIOResult[A]): Boolean =
+      r.fold(_ => false, true)
   }
 
   /**

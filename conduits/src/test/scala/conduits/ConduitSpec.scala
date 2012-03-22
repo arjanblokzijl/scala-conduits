@@ -34,6 +34,10 @@ class ConduitSpec extends Specification with ScalaCheck {
     (sourceList[Id, Int](s1) zip sourceList[Id, Int](s2) >>== consume) must be_===(s1 zip s2)
   }
 
+  "map" ! check {(s1: Stream[Int]) =>
+    (sourceList[Id, Int](s1) map (_ + 1) >>== consume) must be_===(s1 map(_ + 1))
+  }
+
   "head takes the first element, if available" ! check {
     (stream: Stream[Int]) =>
       (sourceList[Id, Int](stream) >>== head)  must be_===(stream.headOption)

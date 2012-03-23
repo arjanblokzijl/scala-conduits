@@ -23,7 +23,6 @@ import java.io.{FileInputStream, File}
 //https://github.com/jsuereth/scalaz/blob/scalaz-nio2
 class BinarySpec extends Specification with ScalaCheck {
   lazy val r: URL = this.getClass.getClassLoader.getResource("test.txt")
-  def decoder = scala.io.Codec.UTF8.newDecoder();
   val expectedBuf = java.nio.ByteBuffer.allocate(bufferSize)
   def f = new File(r.toURI)
 
@@ -34,7 +33,7 @@ class BinarySpec extends Specification with ScalaCheck {
       buf.rewind
       new FileInputStream(f).getChannel.read(expectedBuf)
       expectedBuf.rewind
-      decoder.decode(buf) mustEqual(decoder.decode(expectedBuf))
+      buf must be_==(expectedBuf)
     }
   }
 }

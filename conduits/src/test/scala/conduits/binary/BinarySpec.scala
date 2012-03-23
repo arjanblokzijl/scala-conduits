@@ -16,13 +16,13 @@ import Binary._
 
 import org.specs2.ScalaCheck
 import java.net.URL
-import java.nio.{CharBuffer, ByteBuffer}
+import java.nio.ByteBuffer
 import java.io.{FileInputStream, File}
 
 //TODO this is all very clumsy, perhaps take the approach in scalaz-nio branch
 //https://github.com/jsuereth/scalaz/blob/scalaz-nio2
 class BinarySpec extends Specification with ScalaCheck {
-  lazy val r: URL = this.getClass.getClassLoader.getResource("test.txt")
+  lazy val r: URL = this.getClass.getClassLoader.getResource("random")
   val expectedBuf = java.nio.ByteBuffer.allocate(bufferSize)
   def f = new File(r.toURI)
 

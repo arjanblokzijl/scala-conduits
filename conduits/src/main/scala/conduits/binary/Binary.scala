@@ -15,15 +15,13 @@ import resourcet.MonadResource
 object Binary {
 
   val bufferSize = 8*1024
-  def sourceFile[F[_]](f: File)(implicit MR: MonadResource[F]): Source[F, java.nio.ByteBuffer] = {
-    val str = new FileInputStream(f)
-    sourceIO[F, java.nio.ByteBuffer, java.io.FileInputStream](IO(str), _ => IO(str.close()), s => read(s.getChannel))
-  }
 
-  def read[F[_]](chan: ByteChannel)(implicit MR: MonadResource[F]): F[SourceIOResult[java.nio.ByteBuffer]] = {
-    MR.MO.map(MR.MO.point(java.nio.ByteBuffer.allocate(bufferSize)))(buf => chan.read(buf) match {
-      case -1 => IOClosed.apply
-      case _ => IOOpen(buf)
+  def sourceFile[F[_]](f: File)(implicit MR: MonadResource[F]): Source[F, ByteString] =
+    sourceIOInputStream(IO(new FileInputStream(f)))
+
+  def sourceIOInputStream[F[_]](alloc: IO[FileInputStream])(implicit MR: MonadResource[F]): Source[F, ByteString] =
+    sourceIO[F, ByteString, java.io.FileInputStream](alloc, s => IO(s.close()), s => {
+      MR.MO.map(MR.MO.liftIO(byteString.getContents(s.getChannel)))(bs =>
+        if (bs.isEmpty) IOClosed.apply else IOOpen(bs))
     })
-  }
 }

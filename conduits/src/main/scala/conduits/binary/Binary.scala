@@ -2,7 +2,7 @@ package conduits
 package binary
 
 import Source._
-import SourceUtil._
+import source._
 import scalaz.effect.IO
 import java.io.{FileInputStream, File}
 import java.nio.channels.ByteChannel

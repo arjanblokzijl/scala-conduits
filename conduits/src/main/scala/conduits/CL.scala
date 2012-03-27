@@ -10,8 +10,8 @@ import scalaz._
 * List like operations for conduits.
 */
 object CL {
-  import SinkUtil._
-  import SourceUtil._
+  import sink._
+  import source._
   import resource._
 
   /**

@@ -13,7 +13,7 @@ trait SourceIOResult[A] {
   def fold[Z](ioOpen: (=> A) => Z, ioClosed: => Z): Z
 }
 
-object SourceUtil {
+trait SourceFunctions {
 
   import Source._
   object StateOpen {

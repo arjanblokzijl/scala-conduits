@@ -17,7 +17,7 @@ trait ConduitIOResult[A, B] {
   def fold[Z](finished: (=> Option[A], => Stream[B]) => Z, producing: (=> Stream[B]) => Z): Z
 }
 
-object ConduitUtil {
+trait ConduitFunctions {
   import FoldUtils._
   object StateFinished {
     def apply[S, A, B](maybeInput: => Option[A], output: => Stream[B]) = new ConduitStateResult[S, A, B] {
@@ -76,7 +76,6 @@ object ConduitUtil {
           , M.bind(M0.release(key))(_ => M.point(()))
           , output
         ))))
-
     }
     def close1(key: ReleaseKey, state: S): Source[F, B] =
       SourceM(M.bind(close(state))(output => M.bind(M0.release(key))(_ => M.point(fromList(output)))), M0.release(key))

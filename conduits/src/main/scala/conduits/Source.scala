@@ -1,7 +1,7 @@
 package conduits
 
 import scalaz.{Monoid, Functor, Monad}
-import sinks._
+import sink._
 
 /**
 * User: arjan
@@ -73,8 +73,8 @@ object Source {
     def unapply[F[_], A](s: Source[F, A]): Boolean = {
       s.fold((_, _, _) => false, true, (_, _) => false)
     }
-
   }
+
   object SourceM {
     def apply[F[_], A](msrc: => F[Source[F, A]], c: => F[Unit]) = new Source[F, A] {
       def fold[Z](open: (=> Source[F, A], => F[Unit], => A) => Z, close: => Z, sourceM: (=> F[Source[F, A]], => F[Unit]) => Z) = sourceM(msrc, c)
@@ -104,5 +104,5 @@ private[conduits] trait SourceMonoid[A, F[_]] extends Monoid[Source[F, A]] {
   def zero = Closed.apply[F, A]
 }
 
-object source extends SourceInstances
+object source extends SourceInstances with SourceFunctions
 

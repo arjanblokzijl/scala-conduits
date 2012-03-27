@@ -51,6 +51,7 @@ object Conduit {
       conduit fold((push, close) => Some(push, close), ToNone1, ToNone3, ToNone2)
     }
   }
+
   object Finished {
     def apply[A, F[_], B](maybeInput: => Option[A]) = new Conduit[A, F, B] {
       def fold[Z](running: (=> ConduitPush[A, F, B], => ConduitClose[F, B]) => Z
@@ -62,6 +63,7 @@ object Conduit {
       conduit fold(ToNone2, Some(_), ToNone3, ToNone2)
     }
   }
+
   object HaveMore {
     def apply[A, F[_], B](pull: => ConduitPull[A, F, B], close: => F[Unit], output: => B) = new Conduit[A, F, B] {
       def fold[Z](running: (=> ConduitPush[A, F, B], => ConduitClose[F, B]) => Z
@@ -73,6 +75,7 @@ object Conduit {
       conduit fold(ToNone2, ToNone1, (p, c, o) => Some(p, c, o), ToNone2)
     }
   }
+
   object ConduitM {
     def apply[A, F[_], B](mcon: => F[Conduit[A, F, B]], close: => F[Unit]) = new Conduit[A, F, B] {
       def fold[Z](running: (=> ConduitPush[A, F, B], => ConduitClose[F, B]) => Z
@@ -87,9 +90,6 @@ object Conduit {
 }
 
 
-trait ConduitFunctions {
-}
-
 trait ConduitInstances {
   implicit def conduitFunctor[I, F[_]](implicit M0: Monad[F]): Functor[({type l[a] = Conduit[I, F, a]})#l] = new Functor[({type l[a] = Conduit[I, F, a]})#l] {
      def map[A, B](fa: Conduit[I, F, A])(f: (A) => B): Conduit[I, F, B] = fa map f
@@ -97,7 +97,7 @@ trait ConduitInstances {
 }
 
 
-object conduits extends ConduitFunctions with ConduitInstances {
+object conduits extends ConduitInstances with ConduitFunctions {
   type ConduitPush[I, F[_], A] = I => Conduit[I, F, A]
   type ConduitClose[F[_], A] = Source[F, A]
   type ConduitPull[I, F[_], A] = Conduit[I, F, A]

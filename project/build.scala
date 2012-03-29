@@ -47,10 +47,10 @@ object ScalaConduitsBuild extends Build {
   )
 
   object Dependencies {
-    lazy val scalaz = "org.scalaz" % "scalaz-core_2.9.1" % "7.0-SNAPSHOT"
-    lazy val scalazEffect = "org.scalaz" % "scalaz-effect_2.9.1" % "7.0-SNAPSHOT"
+    def scalaz = "org.scalaz" % "scalaz-core_2.9.1" % "7.0-SNAPSHOT"
+    def scalazEffect = "org.scalaz" % "scalaz-effect_2.9.1" % "7.0-SNAPSHOT"
     //lazy val specs = "org.scala-tools.testing" %% "specs" % "1.6.7" % "test" withSources ()
-    lazy val scalacheck = "org.scala-tools.testing" % "scalacheck_2.8.1" % "1.8" % "test"
+    def scalacheck = "org.scala-tools.testing" % "scalacheck_2.8.1" % "1.8" % "test"
 
     def ScalaCheck = "org.scala-tools.testing" % "scalacheck_2.9.1" % "1.9" % "test"
 

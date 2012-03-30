@@ -246,6 +246,7 @@ object pipes extends PipeInstances with PipeFunctions {
    * A Source does not produce a final result, thus the result parameter is [[scala.Unit]].
    */
    type Source[F[_], A] = Pipe[Zero, A, F, Unit]
+
   /**
    * A Pipe that consumes a stream of input values and produces a final result.
    * It cannot produce any output values, and thus the output parameter is [[conduits.pipes.Zero]]

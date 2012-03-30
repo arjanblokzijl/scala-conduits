@@ -4,40 +4,53 @@ package conduits
 * User: arjan
 */
 import scalaz.Monad
-import Sink._
-import Conduit._
+import pipes._
+import Pipe._
 
 trait ConduitsFunctions {
-  import Source._
-  //TODO move this to Source?
-  def normalConnect[F[_], A, B](source: Source[F, A], sink: Sink[A, F, B])(implicit M: Monad[F]): F[B] = (source, sink) match {
-    case (src, Done(leftover, output)) => M.map(src.sourceClose)(_ => output)
-    case (src, SinkM(msink)) => M.bind(msink)(s => normalConnect(src, s))
-    case (SourceM(msrc, _), sink) => M.bind(msrc)(src => normalConnect(src, sink))
-    case (Closed(), Processing(_, close)) => close
-    case (Open(src, _, a), Processing(push, _)) => normalConnect(src, push(a))
-  }
 
-  def normalFuseLeft[F[_], A, B](source: Source[F, A], conduit: Conduit[A, F, B])(implicit M: Monad[F]): Source[F, B] = (source, conduit) match {
-    case (Closed(), Running(_, close)) => close
-    case (Closed(), Finished(_)) => Closed.apply[F, B]
-    case (src, Finished(_)) => SourceM(M.map(src sourceClose)(_ => Closed.apply), src sourceClose)
-    case (src, HaveMore(p, close, x)) => Open[F, B](normalFuseLeft(src, p), M.bind(src.sourceClose)(_ => close), x)
-    case (SourceM(msrc, closeS), c@Running(_, closeC)) => SourceM(M.map(msrc)(s => normalFuseLeft(s, c)), M.bind(closeS)(_ => (closeC.sourceClose)))
-    case (Open(src, _, a), Running(push, _)) => normalFuseLeft(src, push(a))
-    case (src, ConduitM(mcon, conclose)) => SourceM[F, B]( M.map(mcon)(c => normalFuseLeft(src, c)), M.bind(conclose)(_ => (src.sourceClose)))
-  }
+//  -- | The connect operator, which pulls data from a source and pushes to a sink.
+//  -- There are two ways this process can terminate:
+//  --
+//  -- 1. If the @Sink@ is a @Done@ constructor, the @Source@ is closed.
+//  --
+//  -- 2. If the @Source@ is a @Done@ constructor, the @Sink@ is closed.
+//  --
+//  -- In other words, both the @Source@ and @Sink@ will always be closed. If you
+//  -- would like to keep the @Source@ open to be used for another operations, use
+//  -- the connect-and-resume operators '$$+'.
+//  --
+  def =%=[F[_], A, B, C, R](p1: Pipe[A, B, F, Unit], p2: Pipe[B, C, F, R])(implicit M: Monad[F]): Pipe[A, C, F, R] = pipe(p1, p2)
+
 }
 
-trait ConduitsInstances {
-  trait IsSource[F[_], A, S] {
-    def connect[B](src: S, sink: Sink[A, F, B])(implicit M: Monad[F]): F[B]
+object Conduits extends ConduitsFunctions {
+  class SourceW[F[_], A](src: Source[F, A]) {
+    /**
+     * The connect operator which pulls data from the source and pushed to a sink.
+     * This process can terminate in two ways:
+     *
+     * <ol>
+     *   <li> If the Sink is a `Done` constructor the Source is closed.
+     *   <li> If the Source is a `Done` constructor the Sink is closed.
+     * </ol>
+     *
+     * The above means that both Source and Sink will always be closed.
+     */
+    def %%==[B](sink: Sink[A, F, B])(implicit M: Monad[F]): F[B] = runPipe(pipe(src, sink))
+
+    def %=[B](conduit: Conduit[A, F, B])(implicit M: Monad[F]): Source[F, B] = pipe(src, conduit)
+
+    def zip[B](that: Source[F, B])(implicit M: Monad[F]): Source[F, (A, B)] = CL.zip(src, that)
   }
 
-  implicit def sourceIsSource[F[_], A, B](implicit M: Monad[F]): IsSource[F, A, Source[F, A]] = new IsSource[F, A, Source[F, A]] {
-    def connect[B](src: Source[F, A], sink: Sink[A, F, B])(implicit M: Monad[F]) = Conduits.normalConnect(src, sink)
+  class ConduitW[F[_], A, B](c: Conduit[A, F, B]) {
+    def =%[C](s: Sink[B, F, C])(implicit M: Monad[F]): Sink[A, F, C] = pipe(c, s)
+
+    def %=(s: Source[F, A])(implicit M: Monad[F]): Source[F, B] = pipe(s, c)
   }
+
+  implicit def pToSource[F[_], A](s: Source[F, A]) = new SourceW(s)
+  implicit def pToConduit[F[_], A, B](c: Conduit[A, F, B]) = new ConduitW(c)
 }
-
-object Conduits extends ConduitsInstances with ConduitsFunctions
 

@@ -9,9 +9,10 @@ import effect.IO._
 import scalaz.Id
 import resourcet._
 import resource._
+import Conduits._
 
 object RunConduits extends App {
-
+//
   val sinkSum = CL.sumSink[IO]
   val sinkTake = CL.take[IO, Int](10)
   val sinkTakeS = CL.take[Stream, Int](10)
@@ -27,11 +28,11 @@ object RunConduits extends App {
   val mapSource = sourceId %= CL.map[Id, Int, Int](i => i + 1)// =% sinkTake
   val mapSourceLarge = sourceLarge %= CL.map[IO, Int, Int](i => i + 1)// =% sinkTake
   val mapSourceLargeId = sourceLargeId %= CL.map[Id, Int, Int](i => i + 1)// =% sinkTake
-
-  println("result take " + (sourceId >>== sinkTakeId).take(15).force)
-  println("result take " + (sourceStream >>== sinkTakeS).flatten.take(15).force)
-  println("result consume " + (sourceStream >>== sinkConsume).flatten.take(15).force)
-  println("result large map io " + (mapSourceLarge >>== sinkTake).unsafePerformIO.take(15).force)
-  println("result large map id " + (mapSourceLargeId >>== sinkTakeId).take(15).force)
-  println("result resourceT " + runResourceT(sourceT >>== sinkT).unsafePerformIO)
+//
+  println("result take " + (sourceId %%== sinkTakeId).take(15).force)
+  println("result take " + (sourceStream %%== sinkTakeS).flatten.take(15).force)
+  println("result consume " + (sourceStream %%== sinkConsume).flatten.take(15).force)
+  println("result large map io " + (mapSourceLarge %%== sinkTake).unsafePerformIO.take(15).force)
+  println("result large map id " + (mapSourceLargeId %%== sinkTakeId).take(15).force)
+  println("result resourceT " + runResourceT(sourceT %%== sinkT).unsafePerformIO)
 }

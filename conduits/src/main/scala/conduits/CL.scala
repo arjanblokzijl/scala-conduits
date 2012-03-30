@@ -2,17 +2,18 @@ package conduits
 
 import resourcet.resource
 import scalaz.std.stream._
-import Sink._
-import Conduit._
 import scalaz._
 
 /**
 * List like operations for conduits.
 */
 object CL {
-  import sink._
-  import source._
+  import pipes._
+  import Pipe._
   import resource._
+  import SinkFunctions._
+  import SourceFunctions._
+  import ConduitFunctions._
 
   /**
    * A strict left fold.
@@ -34,11 +35,11 @@ object CL {
 
   /**Take a single value from the stream, if available.*/
   def head[F[_], A](implicit M: Monad[F]): Sink[A, F, Option[A]] =
-    Processing[A, F, Option[A]](a =>  Done(None, Some(a)), M.point[Option[A]](None))
+    NeedInput(a =>  Done(None, Some(a)), pipeMonad[A, Zero, F].point[Option[A]](None))
 
   /**Look at the next value of the stream, if available. This does not alter the content of the stream*/
   def peek[F[_], A](implicit M: Monad[F]): Sink[A, F, Option[A]] =
-    Processing[A, F, Option[A]](a => Done(Some(a), Some(a)), M.point[Option[A]](None))
+    NeedInput(a => Done(Some(a), Some(a)), pipeMonad[A, Zero, F].point[Option[A]](None))
 
   /**
    * Takes a number of values from the data stream and returns a the elements as a [[scala.collection.immutable.Stream]].
@@ -50,39 +51,30 @@ object CL {
    */
   def take[F[_], A](n: Int)(implicit M: Monad[F]): Sink[A, F, Stream[A]] = {
     def app[A](l1: Stream[A], l2: => Stream[A]): Stream[A] = streamInstance.plus(l1, l2)
-    def go(count: Int, acc: Stream[A]) = Processing(push(count, acc), M.point(acc))
+    def go(count: Int, acc: Stream[A]) = NeedInput(push(count, acc), pipeMonad[A, Zero, F].point(acc))
     def push(count: Int, acc: Stream[A])(x: A): Sink[A, F, Stream[A]] = {
        if (count <= 0) Done(Some(x), acc)
        else {
          val count1 = count - 1
          if (count1 <= 0) Done(None, app(acc, Stream(x)))
-         else Processing(push(count1, app(acc, Stream(x))), M.point(app(acc, Stream(x))))
+         else NeedInput(push(count1, app(acc, Stream(x))), pipeMonad[A, Zero, F].point(app(acc, Stream(x))))
        }
     }
     go(n, Stream.empty[A])
   }
 
   def consume[F[_], A](implicit M: Monad[F]): Sink[A, F, Stream[A]] = {
-    def go(acc: Stream[A]): Sink[A, F, Stream[A]] = Processing(push(acc), M.point(acc))
+    def go(acc: Stream[A]): Sink[A, F, Stream[A]] = NeedInput(push(acc), pipeMonad[A, Zero, F].point(acc))
     def push(acc: Stream[A])(x: A): Sink[A, F, Stream[A]] = go(streamInstance.plus(acc, Stream(x)))
     go(Stream.empty[A])
   }
-//  -- | Keep only values in the stream passing a given predicate.
-//  --
-//  -- Since 0.2.0
-//  filter :: Monad m => (a -> Bool) -> Conduit a m a
-//  filter f =
-//      Running push close
-//    where
-//      push i | f i = HaveMore (Running push close) (return ()) i
-//      push _       = Running push close
-//      close = mempty
+
   def filter[F[_], A](f: A => Boolean)(implicit M: Monad[F]): Conduit[A, F, A] = {
-    def close = source.sourceMonoid[A, F].zero
-    def push: conduits.ConduitPush[A, F, A] = i =>
-      if (f(i)) HaveMore[A, F, A](Running(push, close), M.point(()), i)
-      else Running(push, close)
-    Running(push, close)
+    def close = pipeMonoid[A, A, F].zero
+    def push: A => Conduit[A, F, A] = i =>
+      if (f(i)) HaveOutput(NeedInput(push, close), M.point(()), i)
+      else NeedInput(push, close)
+    NeedInput(push, close)
   }
 
   def sourceList[F[_], A](l: => Stream[A])(implicit M: Monad[F]): Source[F, A] = {
@@ -94,10 +86,23 @@ object CL {
   }
 
   def map[F[_], A, B](f: A => B)(implicit M: Monad[F]): Conduit[A, F, B] = {
-    def close = source.sourceMonoid[B, F].zero
-    def push: conduits.ConduitPush[A, F, B] = i =>
-      HaveMore[A, F, B](Running[A, F, B](push, close), M.point(()), f(i))
+    def close = pipeMonoid[A, B, F].zero
+    def push: A => Conduit[A, F, B] = i =>
+      HaveOutput(NeedInput(push, close), M.point(()), f(i))
 
-    Running(push, close)
+    NeedInput(push, close)
+  }
+
+  def zip[F[_], A, B](f1: Source[F, A], f2: Source[F, B])(implicit M: Monad[F]): Source[F, (A, B)] = (f1, f2) match {
+    case (Done(_, ()), Done(_, ())) => Done(None, ())
+    case (Done(_, ()), HaveOutput(_, close, _)) => PipeM(M.bind(close)(_ => M.point(Done(None, ()))), close)
+    case (HaveOutput(_, close, _), Done(_, ())) => PipeM(M.bind(close)(_ => M.point(Done(None, ()))), close)
+    case (Done(_, ()), PipeM(_, close)) => PipeM(M.bind(close)(_ => M.point(Done(None, ()))), close)
+    case (PipeM(_, close), Done(_, ())) => PipeM(M.bind(close)(_ => M.point(Done(None, ()))), close)
+    case (PipeM(mx, closex), PipeM(my, closey)) => PipeM(M.map2(mx, my)((a, b) => zip(a, b)), M.bind(closex)(_ => closey))
+    case (PipeM(mx, closex), y@HaveOutput(_, closey, _)) => PipeM(M.map(mx)(x => zip(x, y)), M.bind(closex)(_ => closey))
+    case (x@HaveOutput(_, closex, _), PipeM(my, closey)) => PipeM(M.map(my)(y => zip(x, y)), M.bind(closex)(_ => closey))
+    case (HaveOutput(srcx, closex, x),HaveOutput(srcy, closey, y)) => HaveOutput(zip(srcx, srcy), M.bind(closex)(_ => closey), (x, y))
+    case _ => sys.error("")
   }
 }

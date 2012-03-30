@@ -4,6 +4,8 @@ import scalaz.{Forall, Monad}
 import scalaz.effect.IO
 import resourcet.{ReleaseKey, MonadResource}
 
+import pipes._
+import Pipe._
 
 sealed trait SourceStateResult[S, A] {
   def fold[Z](open: (=> S, => A) => Z, closed: => Z): Z
@@ -13,9 +15,8 @@ trait SourceIOResult[A] {
   def fold[Z](ioOpen: (=> A) => Z, ioClosed: => Z): Z
 }
 
-trait SourceFunctions {
+object SourceFunctions {
 
-  import Source._
   object StateOpen {
     def apply[S, A](s: => S, output: => A): SourceStateResult[S, A] = new SourceStateResult[S, A] {
       def fold[Z](open: (=> S, => A) => Z, closed: => Z) = open(s, output)
@@ -58,49 +59,50 @@ trait SourceFunctions {
    */
   def sourceState[S, F[_], A](state: => S, pull: (S => F[SourceStateResult[S, A]]))(implicit M: Monad[F]): Source[F, A] = {
     def pull1(state: => S): F[Source[F, A]] =
-      M.bind(pull(state))(res => res.fold(open = (s, o) => M.point(Open(src(s), close, o)), closed = M.point(Closed.apply)))
+      M.bind(pull(state))(res => res.fold(open = (s, o) => M.point(HaveOutput(src(s), close, o)),
+                                          closed = M.point(Done[Zero, A, F, Unit](None, ()))))
     def close = M.point(())
-    def src(state1: => S) = SourceM(pull1(state1), close)
+    def src(state1: => S): Pipe[Zero, A, F, Unit] = PipeM(pull1(state1), close)
     src(state)
   }
 
   /**A combination of sourceState and sourceIO*/
   def sourceStateIO[S, F[_], A](alloc: => IO[S], cleanup: (S => IO[Unit]), pull: S => F[SourceStateResult[S, A]])(implicit M0: MonadResource[F]): Source[F, A] = {
     implicit val M = M0.MO
-    def src(key: => ReleaseKey, state: => S): Source[F, A] = SourceM(pull1(key)(state), M0.release(key))
+    def src(key: => ReleaseKey, state: => S): Source[F, A] = PipeM(pull1(key)(state), M0.release(key))
     def pull1(key: => ReleaseKey)(state: => S): F[Source[F, A]] = {
       M.bind(pull(state))(res => res.fold(
-         open = (s, o) => M.point(Open(src(key, s), M0.release(key), o))
-         , closed = M.bind(M0.release(key))(_ => M.point(Closed.apply[F, A]))))
+         open = (s, o) => M.point(HaveOutput(src(key, s), M0.release(key), o))
+         , closed = M.bind(M0.release(key))(_ => M.point(Done(None, ())))))
     }
-    SourceM(msrc = M.bind(M0.allocate(alloc, cleanup))(ks => pull1(ks._1)(ks._2)),
-            c = M.point(()))
+    PipeM(M.bind(M0.allocate(alloc, cleanup))(ks => pull1(ks._1)(ks._2))
+          , M.point(()))
   }
 
 
   /**Constructs a 'Source' based on some IO actions for alloc/release.*/
   def sourceIO[F[_], A, S](alloc: IO[S], cleanup: S => IO[Unit], pull: S => F[SourceIOResult[A]])(implicit M0: MonadResource[F]): Source[F, A] = {
     implicit val M = M0.MO
-    def src(key: => ReleaseKey, state: => S): Source[F, A] = SourceM(pull1(key)(state), M0.release(key))
+    def src(key: => ReleaseKey, state: => S): Source[F, A] = PipeM(pull1(key)(state), M0.release(key))
     def pull1(key: => ReleaseKey)(state: => S): F[Source[F, A]] = {
       M.bind(pull(state))((res: SourceIOResult[A]) => res.fold(
-         ioOpen = b => M.point(Open.apply(src(key, state), M0.release(key), b))
-         , ioClosed = M.bind(M0.release(key))(_ => M.point(Closed.apply[F, A]))))
+         ioOpen = b => M.point(HaveOutput(src(key, state), M0.release(key), b))
+         , ioClosed = M.bind(M0.release(key))(_ => M.point(Done(None, ())))))
     }
-    SourceM(msrc = M.bind(M0.allocate(alloc, cleanup))(ks => pull1(ks._1)(ks._2)),
-            c = M.point(()))
+    PipeM(M.bind(M0.allocate(alloc, cleanup))(ks => pull1(ks._1)(ks._2)),
+           M.point(()))
   }
 
-  /**
-   * Transform the monad a 'Source' lives in.
-   *
-   * Note that this will /not/ thread the individual monads together, meaning
-   * side effects will be lost. This function is most useful for transformers
-   * only providing context and not producing side-effects.
-   */
-  def transSource[F[_], G[_], A](f: Forall[({type λ[A] = F[A] => G[A]})#λ], source: Source[F, A])(implicit M: Monad[F], N: Monad[G]): Source[G, A] = source match {
-    case Open(next, close, output) => Open(transSource(f, next), f.apply(close), output)
-    case Closed() => Closed.apply[G, A]
-    case SourceM(msrc, close) => SourceM[G, A](f.apply(M.map(msrc)(s => transSource(f, s))), f.apply(close))
-  }
+//  /**
+//   * Transform the monad a 'Source' lives in.
+//   *
+//   * Note that this will /not/ thread the individual monads together, meaning
+//   * side effects will be lost. This function is most useful for transformers
+//   * only providing context and not producing side-effects.
+//   */
+//  def transSource[F[_], G[_], A](f: Forall[({type λ[A] = F[A] => G[A]})#λ], source: Source[F, A])(implicit M: Monad[F], N: Monad[G]): Source[G, A] = source match {
+//    case Open(next, close, output) => Open(transSource(f, next), f.apply(close), output)
+//    case Closed() => Closed.apply[G, A]
+//    case SourceM(msrc, close) => SourceM[G, A](f.apply(M.map(msrc)(s => transSource(f, s))), f.apply(close))
+//  }
 }

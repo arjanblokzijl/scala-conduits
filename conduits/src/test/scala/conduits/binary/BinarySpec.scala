@@ -19,6 +19,7 @@ import java.net.URL
 import java.nio.ByteBuffer
 import java.io.{FileInputStream, File}
 import scala.io.Codec
+import Conduits._
 
 //TODO this is all very clumsy, perhaps take the approach in scalaz-nio branch
 //https://github.com/jsuereth/scalaz/blob/scalaz-nio2
@@ -29,7 +30,7 @@ class BinarySpec extends Specification with ScalaCheck {
 
   "binary" should {
     "stream a file in a Source" in {
-      val result: Stream[ByteString] = runResourceT(sourceFile[RTIO](f) >>== consume).unsafePerformIO
+      val result: Stream[ByteString] = runResourceT(sourceFile[RTIO](f) %%== consume).unsafePerformIO
       val buf: ByteBuffer = result.head.asByteBuffer
       new FileInputStream(f).getChannel.read(expectedBuf)
       buf must be_==(byteString.fromByteBuffer(expectedBuf).asByteBuffer)

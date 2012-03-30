@@ -2,7 +2,7 @@ package conduits
 
 import pipes._
 import Pipe._
-import scalaz.{MonadTrans, Monad}
+import scalaz.{Monoid, MonadTrans, Monad}
 
 /**
  * The underlying datatype for all the types in this package.  In has four
@@ -18,7 +18,7 @@ import scalaz.{MonadTrans, Monad}
  * Note that the types `B` and `R` not the same: `B` is the type of values that
  * this Pipe produces and sends downstream. `R` is the final output of this Pipe.
  *
- * Pipes can be composed using the `pipe` funcitons.
+ * Pipes can be composed using the `pipe` functions.
  * The output type of the left pipe much match the input type of the left pipe, and the result
  * type of the left pipe must be [[scala.Unit]]. This is due to the fact that any
  * result produced by the left pipe must be discarded in favor of the result of
@@ -53,7 +53,6 @@ sealed trait Pipe[A, B, F[_], R] {
     , done = (_, r) => Done(Some(i), r)
     , pipeM = (mp, c) => PipeM(F.map(mp)(p => p.pipePush(i)), c)
   )
-
 
   def map[S](f: (R) => S)(implicit F: Monad[F]): Pipe[A, B, F, S] = flatMap(a => Done(None, f(a)))
 
@@ -138,6 +137,15 @@ trait PipeInstances {
 
     def liftM[G[_], A](ga: G[A])(implicit M: Monad[G]): Pipe[I, O, G, A] = PipeM(M.map(ga)(a => pipeMonad[I, O, G].point(a)), ga)
   }
+
+//instance Monad m => Monoid (Pipe i o m ()) where
+//    mempty = return ()
+//    mappend = (>>)
+  implicit def pipeMonoid[A, B, F[_]](implicit F: Monad[F]): Monoid[Pipe[A, B, F, Unit]] = new Monoid[Pipe[A, B, F, Unit]] {
+    def zero = pipeMonad[A, B, F].point(())
+
+    def append(f1: Pipe[A, B, F, Unit], f2: => Pipe[A, B, F, Unit]) = f1 flatMap (_ => f2)
+  }
 }
 
 trait PipeFunctions {
@@ -179,12 +187,76 @@ trait PipeFunctions {
     , done = (_, r) => Done(l, r)
     , pipeM = (mp, c) => PipeM(F.map(mp)(p => replaceLeftOver(l, p)), c)
     )
+
+  /**
+   * Run a complete pipeline until processing completes.
+   */
+  def runPipe[F[_], R](p: => Pipe[Zero, Zero, F, R])(implicit F: Monad[F]): F[R] = p.fold(
+    haveOutput = (_, c, _) => c
+    , needInput = (_, c) => runPipe(c)
+    , done = (_, r) => F.point(r)
+    , pipeM = (mp, _) => F.bind(mp)(p1 => runPipe(p1))
+  )
+
+  /**
+   * Send a single output value downstream.
+   */
+  def yieldp[A, B, F[_]](b: => B)(implicit F: Monad[F]): Pipe[A, B, F, Unit] =
+    HaveOutput(Done(None, ()), F.point(()), b)
+
+  /**
+   * Wait for a single input value from upstream, and remove it from the
+   * stream. Returns [[scala.None]] if no more data is available.
+   */
+  def await[A, B, F[_]](implicit F: Monad[F]): Pipe[A, B, F, Option[A]] =
+    NeedInput(a => Done(None, Some(a)), Done(None, None))
+
+  /**
+   * Wait for a single input value from upstream, and remove it from the
+   * stream. Returns [[scala.None]] if no more data is available.
+   */
+  def hasInput[A, B, F[_]](implicit F: Monad[F]): Pipe[A, B, F, Boolean] =
+    NeedInput(i => Done(Some(i), true), Done(None, false))
+
+  /**
+   * The [[conduits.pipes.Zero]] type parameter for Sink in the output, makes
+   * it difficult to compose it with Sources and Conduits. This function replaces
+   * that parameter with a free variable. The function is essentially `id`: it
+   * only modifies the types, not the actions performed.
+   *
+   */
+  def sinkToPipe[A, B, F[_], R](s: Sink[A, F, R])(implicit F: Monad[F]): Pipe[A, B, F, R] = s.fold(
+    haveOutput = (_, c, _) => pipeMonadTrans.liftM(c)
+    , needInput = (p, c) => NeedInput(i => sinkToPipe(p.apply(i)), sinkToPipe(c))
+    , done = (i, r) => Done(i, r)
+    , pipeM = (mp, c) => PipeM(F.map(mp)(p => sinkToPipe(p)), c)
+  )
+
 }
 
-object pipes extends PipeInstances {
+object pipes extends PipeInstances with PipeFunctions {
 
+  /**
+   * The uninhabited type.
+   */
   sealed trait Zero
 
-  object Zero extends Zero
+  /**
+   * A Pipe that produces a stream of output values, without consuming any input.
+   * A Source does not produce a final result, thus the result parameter is [[scala.Unit]].
+   */
+   type Source[F[_], A] = Pipe[Zero, A, F, Unit]
+  /**
+   * A Pipe that consumes a stream of input values and produces a final result.
+   * It cannot produce any output values, and thus the output parameter is [[conduits.pipes.Zero]]
+   */
+   type Sink[A, F[_], R] = Pipe[A, Zero, F, R]
+
+  /**
+   * A Pipe that consumes a stream of input values and produces a stream
+   * of output values. It does not produce a result value, and thus the result
+   * parameter is [[scala.Unit]]
+   */
+   type Conduit[A, F[_], B] = Pipe[A, B, F, Unit]
 
 }

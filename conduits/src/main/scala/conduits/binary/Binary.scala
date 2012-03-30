@@ -1,8 +1,9 @@
 package conduits
 package binary
 
-import Source._
-import source._
+import pipes._
+import Pipe._
+import SourceFunctions._
 import scalaz.effect.IO
 import java.io.{FileInputStream, File}
 import resourcet.MonadResource

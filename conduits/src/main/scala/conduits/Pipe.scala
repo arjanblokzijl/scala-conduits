@@ -36,7 +36,6 @@ sealed trait Pipe[A, B, F[_], R] {
               , done: (=> Option[A], => R) => Z
               , pipeM: (=> F[Pipe[A, B, F, R]], => F[R]) => Z): Z
 
-
   /**
    * Perform any close actions available for the given Pipe.
    */

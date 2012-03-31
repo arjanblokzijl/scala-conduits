@@ -1,8 +1,2 @@
-A small conduits test file
-
-
-
-
-
-add some newlines.
-
+A small test file
+for conduits

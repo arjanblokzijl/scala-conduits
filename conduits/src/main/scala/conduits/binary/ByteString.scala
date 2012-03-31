@@ -7,61 +7,87 @@ import java.nio.channels.ByteChannel
 import scalaz.effect.IO
 import IO._
 import scala.io.Codec
+import collection.mutable.{ArrayBuilder, Builder}
+import scalaz.{Show, Order, Monoid}
+import collection.{Traversable, IndexedSeqOptimized}
+import collection.generic.CanBuildFrom
+import scalaz.std.anyVal
 
 /**
  * User: arjan
  */
 
-sealed trait IOMode
-class Read extends IOMode
-class Write extends IOMode
 
-//TODO create lazy, chunked version of this.
-sealed trait ByteString {
-  /**Returns a read-only Buffer that is wrapped by this ByteString*/
-  def asByteBuffer: java.nio.ByteBuffer
+final class SByteString(bytes: Array[Byte]) extends IndexedSeq[Byte] with IndexedSeqOptimized[Byte, SByteString] {
+  private val arr = bytes.clone
+  override protected[this] def newBuilder = ArrayBuilder.make[Byte]().mapResult(new SByteString(_))
 
-  def isEmpty = this match {
-    case Empty => true
-    case _ => false
+  def apply(idx: Int) = arr(idx)
+
+  def length = arr.length
+
+  def toByteBuffer: ByteBuffer = ByteBuffer.wrap(arr).asReadOnlyBuffer
+
+  def toArray: Array[Byte] = arr
+
+  def append(f2: => SByteString) = new SByteString(this.toArray ++ f2.toArray)
+}
+
+trait SByteStringInstances {
+  import byteString._
+  implicit val byteStringInstance: Monoid[SByteString] with Order[SByteString] with Show[SByteString] = new Monoid[SByteString] with Order[SByteString] with Show[SByteString]  {
+    def show(f: SByteString) = f.toString.toList
+
+    def append(f1: SByteString, f2: => SByteString) = f1 append f2
+
+    def zero: SByteString = empty
+
+    def order(x: SByteString, y: SByteString): scalaz.Ordering = {
+      val i1 = x.iterator
+      val i2 = y.iterator
+      while (i1.hasNext && i2.hasNext) {
+        val a1 = i1.next()
+        val a2 = i2.next()
+        val o = if (a1 < a2) scalaz.Ordering.LT
+        else if (a1 > a2) scalaz.Ordering.GT
+        else scalaz.Ordering.EQ
+        if (o != scalaz.Ordering.EQ) {
+          return o
+        }
+      }
+      anyVal.booleanInstance.order(i1.hasNext, i2.hasNext)
+    }
+
+    override def equalIsNatural: Boolean = true
   }
 }
 
-class ArrayByteString(private val bytes: Array[Byte]) extends ByteString {
-  def asByteBuffer = ByteBuffer.wrap(bytes).asReadOnlyBuffer
-}
-
-object Empty extends ByteString {
-  def asByteBuffer = ByteBuffer.wrap(Array.empty[Byte])
-}
-
-trait ByteStringFunctions {
+trait SByteStringFunctions {
   val DefaultBufferSize = 8*1024
   /** Converts a `java.nio.ByteBuffer` into a `ByteString`. */
-  def fromByteBuffer(bytes: java.nio.ByteBuffer): ByteString = {
+  def fromByteBuffer(bytes: java.nio.ByteBuffer, length: Int = DefaultBufferSize): SByteString = {
     bytes.rewind()
-    val ar = new Array[Byte](bytes.remaining)
+    val ar = new Array[Byte](length)
     bytes.get(ar)
-    new ArrayByteString(ar)
+    new SByteString(ar)
   }
 
-  def readFile(f: File): IO[ByteString] =
+  def readFile(f: File): IO[SByteString] =
     IO(new FileInputStream(f).getChannel).flatMap(c => getContents(c))
 
-  def getContents(chan: ByteChannel, capacity: Int = DefaultBufferSize): IO[ByteString] = {
+  def getContents(chan: ByteChannel, capacity: Int = DefaultBufferSize): IO[SByteString] = {
     val buf = java.nio.ByteBuffer.allocate(capacity)
     IO(chan.read(buf)).map(i => i match {
-      case -1 => Empty
-      case _ => fromByteBuffer(buf)
+      case -1 => empty
+      case n => fromByteBuffer(buf, n)
     })
   }
+
+  def empty: SByteString = new SByteString(Array.empty[Byte])
+  def singleton(b: Byte): SByteString = new SByteString(Array(b))
 }
 
-trait ByteStringInstances {
-  //todo show, equal, etc..
-}
-
-object byteString extends ByteStringInstances with ByteStringFunctions {
+object byteString extends SByteStringInstances with SByteStringFunctions {
 
 }
 

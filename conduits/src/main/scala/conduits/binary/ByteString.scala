@@ -16,11 +16,12 @@ import scalaz.std.anyVal
 /**
  * User: arjan
  */
+trait ByteString extends IndexedSeq[Byte]
 
-
-final class SByteString(bytes: Array[Byte]) extends IndexedSeq[Byte] with IndexedSeqOptimized[Byte, SByteString] {
+final class SByteString(bytes: Array[Byte]) extends ByteString with IndexedSeqOptimized[Byte, ByteString] {
+  import byteString._
   private val arr = bytes.clone
-  override protected[this] def newBuilder = ArrayBuilder.make[Byte]().mapResult(new SByteString(_))
+  override protected[this] def newBuilder: Builder[Byte, ByteString] = ArrayBuilder.make[Byte]().mapResult(new SByteString(_))
 
   def apply(idx: Int) = arr(idx)
 
@@ -30,7 +31,9 @@ final class SByteString(bytes: Array[Byte]) extends IndexedSeq[Byte] with Indexe
 
   def toArray: Array[Byte] = arr
 
-  def append(f2: => SByteString) = new SByteString(this.toArray ++ f2.toArray)
+  def cons(b: Byte): SByteString = singleton(b) append this
+
+  def append(f2: => SByteString): SByteString = new SByteString(this.toArray ++ f2.toArray)
 }
 
 trait SByteStringInstances {
@@ -67,13 +70,14 @@ trait SByteStringFunctions {
   /** Converts a `java.nio.ByteBuffer` into a `ByteString`. */
   def fromByteBuffer(bytes: java.nio.ByteBuffer, length: Int = DefaultBufferSize): SByteString = {
     bytes.rewind()
-    val ar = new Array[Byte](length)
+    val bufSize = if (length < bytes.remaining) bytes.remaining else length
+    val ar = new Array[Byte](bufSize)
     bytes.get(ar)
     new SByteString(ar)
   }
 
   def readFile(f: File): IO[SByteString] =
-    IO(new FileInputStream(f).getChannel).flatMap(c => getContents(c))
+    IO(new FileInputStream(f).getChannel) flatMap(getContents(_))
 
   def getContents(chan: ByteChannel, capacity: Int = DefaultBufferSize): IO[SByteString] = {
     val buf = java.nio.ByteBuffer.allocate(capacity)
@@ -87,7 +91,5 @@ trait SByteStringFunctions {
   def singleton(b: Byte): SByteString = new SByteString(Array(b))
 }
 
-object byteString extends SByteStringInstances with SByteStringFunctions {
-
-}
+object byteString extends SByteStringInstances with SByteStringFunctions
 

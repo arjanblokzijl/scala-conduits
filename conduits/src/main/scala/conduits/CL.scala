@@ -31,7 +31,7 @@ object CL {
     sinkState[B, A, F, B](z, push, close)
   }
 
-  def sumSink[F[_]](implicit M: Monad[F]): Sink[Int, F, Int] = foldLeft((0: Int))(_ + _)
+  def sum[F[_]](implicit M: Monad[F]): Sink[Int, F, Int] = foldLeft((0: Int))(_ + _)
 
   /**Take a single value from the stream, if available.*/
   def head[F[_], A](implicit M: Monad[F]): Sink[A, F, Option[A]] =
@@ -43,11 +43,6 @@ object CL {
 
   /**
    * Takes a number of values from the data stream and returns a the elements as a [[scala.collection.immutable.Stream]].
-   * @param n the number of elements to return
-   * @param M the Monad instance
-   * @tparam F the type representing an effect.
-   * @tparam A the type of input, as well as output elements.
-   * @return
    */
   def take[F[_], A](n: Int)(implicit M: Monad[F]): Sink[A, F, Stream[A]] = {
     def app[A](l1: Stream[A], l2: => Stream[A]): Stream[A] = streamInstance.plus(l1, l2)

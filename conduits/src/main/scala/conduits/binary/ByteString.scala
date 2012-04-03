@@ -12,40 +12,39 @@ import scalaz.{Show, Order, Monoid}
 import collection.{Traversable, IndexedSeqOptimized}
 import collection.generic.CanBuildFrom
 import scalaz.std.anyVal
+import byteString._
 
 /**
  * User: arjan
  */
-trait ByteString extends IndexedSeq[Byte]
 
-final class SByteString(bytes: Array[Byte]) extends ByteString with IndexedSeqOptimized[Byte, ByteString] {
-  import byteString._
+final class ByteString(bytes: Array[Byte]) extends IndexedSeq[Byte] with IndexedSeqOptimized[Byte, ByteString] {
   private val arr = bytes.clone
-  override protected[this] def newBuilder: Builder[Byte, ByteString] = ArrayBuilder.make[Byte]().mapResult(new SByteString(_))
+  override protected[this] def newBuilder: Builder[Byte, ByteString] = ArrayBuilder.make[Byte]().mapResult(new ByteString(_))
+
+  def &:(b: Byte): ByteString = cons(b, this)
 
   def apply(idx: Int) = arr(idx)
 
   def length = arr.length
 
-  def toByteBuffer: ByteBuffer = ByteBuffer.wrap(arr).asReadOnlyBuffer
+  def append(that: => ByteString): ByteString = new ByteString(arr ++ that.toArray)
+
+  def toByteBuffer: ByteBuffer = ByteBuffer.wrap(toArray).asReadOnlyBuffer
 
   def toArray: Array[Byte] = arr
-
-  def cons(b: Byte): SByteString = singleton(b) append this
-
-  def append(f2: => SByteString): SByteString = new SByteString(this.toArray ++ f2.toArray)
 }
 
 trait SByteStringInstances {
   import byteString._
-  implicit val byteStringInstance: Monoid[SByteString] with Order[SByteString] with Show[SByteString] = new Monoid[SByteString] with Order[SByteString] with Show[SByteString]  {
-    def show(f: SByteString) = f.toString.toList
+  implicit val byteStringInstance: Monoid[ByteString] with Order[ByteString] with Show[ByteString] = new Monoid[ByteString] with Order[ByteString] with Show[ByteString] {
+    def show(f: ByteString) = f.toString.toList
 
-    def append(f1: SByteString, f2: => SByteString) = f1 append f2
+    def append(f1: ByteString, f2: => ByteString) = new ByteString(f1.toArray ++ f2.toArray)
 
-    def zero: SByteString = empty
+    def zero: ByteString = empty
 
-    def order(x: SByteString, y: SByteString): scalaz.Ordering = {
+    def order(x: ByteString, y: ByteString): scalaz.Ordering = {
       val i1 = x.iterator
       val i2 = y.iterator
       while (i1.hasNext && i2.hasNext) {
@@ -66,20 +65,22 @@ trait SByteStringInstances {
 }
 
 trait SByteStringFunctions {
-  val DefaultBufferSize = 8*1024
+  val DefaultChunkSize = 8*1024
   /** Converts a `java.nio.ByteBuffer` into a `ByteString`. */
-  def fromByteBuffer(bytes: java.nio.ByteBuffer, length: Int = DefaultBufferSize): SByteString = {
+  def fromByteBuffer(bytes: java.nio.ByteBuffer, length: Int = DefaultChunkSize): ByteString = {
     bytes.rewind()
     val bufSize = if (length < bytes.remaining) bytes.remaining else length
     val ar = new Array[Byte](bufSize)
     bytes.get(ar)
-    new SByteString(ar)
+    new ByteString(ar)
   }
 
-  def readFile(f: File): IO[SByteString] =
+  def cons(b: Byte, bs: ByteString): ByteString = new ByteString(b +: bs.toArray)
+
+  def readFile(f: File): IO[ByteString] =
     IO(new FileInputStream(f).getChannel) flatMap(getContents(_))
 
-  def getContents(chan: ByteChannel, capacity: Int = DefaultBufferSize): IO[SByteString] = {
+  def getContents(chan: ByteChannel, capacity: Int = DefaultChunkSize): IO[ByteString] = {
     val buf = java.nio.ByteBuffer.allocate(capacity)
     IO(chan.read(buf)).map(i => i match {
       case -1 => empty
@@ -87,8 +88,8 @@ trait SByteStringFunctions {
     })
   }
 
-  def empty: SByteString = new SByteString(Array.empty[Byte])
-  def singleton(b: Byte): SByteString = new SByteString(Array(b))
+  def empty: ByteString = new ByteString(Array.empty[Byte])
+  def singleton(b: Byte): ByteString = new ByteString(Array(b))
 }
 
 object byteString extends SByteStringInstances with SByteStringFunctions

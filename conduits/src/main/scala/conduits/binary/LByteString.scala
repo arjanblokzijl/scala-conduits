@@ -74,8 +74,8 @@ trait LByteStringFunctions {
 
   def singleton(b: => Byte): LByteString = Chunk(byteString.singleton(b), Empty.apply)
 
-  def readFile(f: File): IO[LByteString] =
-      IO(new FileInputStream(f).getChannel) flatMap(getContents(_))
+  def readFile(f: File, chunkSize: Int = byteString.DefaultChunkSize): IO[LByteString] =
+      IO(new FileInputStream(f).getChannel) flatMap(getContents(_, chunkSize))
 
   def getContents(chan: ByteChannel, capacity: Int = byteString.DefaultChunkSize): IO[LByteString] = {
     def loop: IO[LByteString] = {

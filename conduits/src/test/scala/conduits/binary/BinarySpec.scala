@@ -33,6 +33,12 @@ class BinarySpec extends Specification {
       val expected = lbyteString.readFile(random).unsafePerformIO
       lbyteString.lbyteStringInstance.equal(result, expected)
     }
+    "stream a file in a Source in multiple chunks" in {
+      val bss: Stream[ByteString] = runResourceT(sourceFile[RTIO](random, 8) %%== consume).unsafePerformIO
+      val result = lbyteString.fromChunks(bss)
+      val expected = lbyteString.readFile(random).unsafePerformIO
+      lbyteString.lbyteStringInstance.equal(result, expected)
+    }
     //TODO create separate LByteString test
     "check equality" in {
       val bss: Stream[ByteString] = runResourceT(sourceFile[RTIO](f1) %%== consume).unsafePerformIO

@@ -77,8 +77,8 @@ trait SByteStringFunctions {
 
   def cons(b: Byte, bs: ByteString): ByteString = new ByteString(b +: bs.toArray)
 
-  def readFile(f: File): IO[ByteString] =
-    IO(new FileInputStream(f).getChannel) flatMap(getContents(_))
+  def readFile(f: File, chunkSize: Int = DefaultChunkSize): IO[ByteString] =
+    IO(new FileInputStream(f).getChannel) flatMap(getContents(_, chunkSize))
 
   def getContents(chan: ByteChannel, capacity: Int = DefaultChunkSize): IO[ByteString] = {
     val buf = java.nio.ByteBuffer.allocate(capacity)

@@ -22,6 +22,13 @@ class ConduitSpec extends Specification with ScalaCheck {
       (sourceList[Id, Int](stream) %%== take(n))  must be_===(stream.take(n))
   }
 
+  "drops the given number of elements" ! check {
+    (stream: Stream[Int], n: Int) => {
+      val (src2, _) = sourceList[Id, Int](stream) %%==+ drop(n)
+      (src2 %%== consume) must be_===(stream.drop(n))
+    }
+  }
+
   "consume all elements" ! check {
     (stream: Stream[Int]) =>
       (sourceList[Id, Int](stream) %%== consume)  must be_===(stream)

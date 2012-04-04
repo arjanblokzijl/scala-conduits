@@ -58,6 +58,17 @@ object CL {
     go(n, Stream.empty[A])
   }
 
+  def drop[F[_], A](count: Int)(implicit M: Monad[F]): Sink[A, F, Unit] = {
+    def push(i: A): Sink[A, F, Unit] = (count - 1) match {
+      case 0 => Done(None, ())
+      case n => drop(n)
+    }
+    count match {
+      case n if (n <= 0) => NeedInput(i => Done(Some(i), ()), pipeMonad[A, Zero, F].point(()))
+      case c => NeedInput(push, NeedInput(push, pipeMonad[A, Zero, F].point(())))
+    }
+  }
+
   def consume[F[_], A](implicit M: Monad[F]): Sink[A, F, Stream[A]] = {
     def go(acc: Stream[A]): Sink[A, F, Stream[A]] = NeedInput(push(acc), pipeMonad[A, Zero, F].point(acc))
     def push(acc: Stream[A])(x: A): Sink[A, F, Stream[A]] = go(streamInstance.plus(acc, Stream(x)))

@@ -91,10 +91,24 @@ object CL {
     sourceState[Stream[A], F, A](l, (s: Stream[A]) => go(s))
   }
 
+  /**
+   * Apply a transformation to all values in a stream.
+   */
   def map[F[_], A, B](f: A => B)(implicit M: Monad[F]): Conduit[A, F, B] = {
     def close = pipeMonoid[A, B, F].zero
     def push: A => Conduit[A, F, B] = i =>
       HaveOutput(NeedInput(push, close), M.point(()), f(i))
+
+    NeedInput(push, close)
+  }
+
+  /**
+   * Apply a transformation to all values in a stream, concatenating the output values.
+   */
+  def concatMap[F[_], A, B](f: A => Stream[B])(implicit M: Monad[F]): Conduit[A, F, B] = {
+    def close = pipeMonoid[A, B, F].zero
+    def push: A => Conduit[A, F, B] = i =>
+      haveMore(NeedInput(push, close), M.point(()), f(i))
 
     NeedInput(push, close)
   }

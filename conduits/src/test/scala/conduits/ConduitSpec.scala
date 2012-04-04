@@ -46,6 +46,10 @@ class ConduitSpec extends Specification with ScalaCheck {
     ((CL.map[Id, Int, Int]((i: Int) => i + 1) %= sourceList(s1)) %%== consume) must be_===(s1 map(_ + 1))
   }
 
+  "concatMap" ! check {(s1: Stream[Int]) =>
+    ((CL.concatMap[Id, Int, Int]((i: Int) => (i to (i + 9)).toStream) %= sourceList(s1)) %%== consume) must be_===(s1 flatMap(i => (i to (i + 9)).toStream))
+  }
+
   "head takes the first element, if available" ! check {
     (stream: Stream[Int]) =>
       (sourceList[Id, Int](stream) %%== head)  must be_===(stream.headOption)

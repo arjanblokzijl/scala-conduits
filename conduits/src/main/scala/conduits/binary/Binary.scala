@@ -4,6 +4,7 @@ package binary
 import pipes._
 import Pipe._
 import SourceFunctions._
+import SinkFunctions._
 import scalaz.effect.IO
 import java.io.{FileInputStream, File}
 import resourcet.MonadResource
@@ -25,4 +26,17 @@ object Binary {
         if (bs.isEmpty) IOClosed.apply
         else IOOpen(bs))
     })
+
+  def sinkFile[F[_]](f: File)(implicit MR: MonadResource[F]): Sink[ByteString, F, Unit] =
+    sinkInputStream(IO(new FileInputStream(f)))
+
+  def sinkInputStream[F[_]](fs: IO[FileInputStream])(implicit MR: MonadResource[F]): Sink[ByteString, F, Unit] = {
+    implicit val M = MR.MO
+    def close = pipeMonoid[ByteString, Zero, F].zero
+    def push(bs: ByteString) : Sink[ByteString, F, Unit] =
+      PipeM(M.bind(M.map(M.liftIO(fs))(f => bs.writeContents(f.getChannel)))(_ => M.point(NeedInput[ByteString, Zero, F, Unit](push, close)))
+            , M.point(()))
+
+    NeedInput(push, close)
+  }
 }

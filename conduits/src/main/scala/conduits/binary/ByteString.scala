@@ -33,6 +33,14 @@ final class ByteString(bytes: Array[Byte]) extends IndexedSeq[Byte] with Indexed
   def toByteBuffer: ByteBuffer = ByteBuffer.wrap(toArray).asReadOnlyBuffer
 
   def toArray: Array[Byte] = arr
+
+  /**
+   * Writes the contents of the this ByteString into the given ByteChannel.
+   */
+  def writeContents(chan: ByteChannel): IO[Unit] =
+    if (isEmpty) IO(())
+    else IO(chan.write(toByteBuffer)).flatMap(_ => IO(()))
+
 }
 
 trait SByteStringInstances {
@@ -90,6 +98,12 @@ trait SByteStringFunctions {
 
   def empty: ByteString = new ByteString(Array.empty[Byte])
   def singleton(b: Byte): ByteString = new ByteString(Array(b))
+
+
+//  -- | Outputs a 'ByteString' to the specified 'Handle'.
+//  hPut :: Handle -> ByteString -> IO ()
+//  hPut _ (PS _  _ 0) = return ()
+//  hPut h (PS ps s l) = withForeignPtr ps $ \p-> hPutBuf h (p `plusPtr` s) l
 }
 
 object byteString extends SByteStringInstances with SByteStringFunctions

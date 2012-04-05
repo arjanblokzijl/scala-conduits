@@ -75,10 +75,9 @@ trait SByteStringInstances {
 trait SByteStringFunctions {
   val DefaultChunkSize = 8*1024
   /** Converts a `java.nio.ByteBuffer` into a `ByteString`. */
-  def fromByteBuffer(bytes: java.nio.ByteBuffer, length: Int = DefaultChunkSize): ByteString = {
+  def fromByteBuffer(bytes: java.nio.ByteBuffer, size: Int = DefaultChunkSize): ByteString = {
     bytes.rewind()
-    val bufSize = if (length < bytes.remaining) bytes.remaining else length
-    val ar = new Array[Byte](bufSize)
+    val ar = new Array[Byte](size)
     bytes.get(ar)
     new ByteString(ar)
   }
@@ -98,12 +97,6 @@ trait SByteStringFunctions {
 
   def empty: ByteString = new ByteString(Array.empty[Byte])
   def singleton(b: Byte): ByteString = new ByteString(Array(b))
-
-
-//  -- | Outputs a 'ByteString' to the specified 'Handle'.
-//  hPut :: Handle -> ByteString -> IO ()
-//  hPut _ (PS _  _ 0) = return ()
-//  hPut h (PS ps s l) = withForeignPtr ps $ \p-> hPutBuf h (p `plusPtr` s) l
 }
 
 object byteString extends SByteStringInstances with SByteStringFunctions

@@ -17,4 +17,5 @@ trait FileSpecification extends Specification {
   def random = new File(r.toURI)
   def test1: File = new File(r1.toURI)
   def test2: File = new File(r2.toURI)
+  def tmpFile = File.createTempFile("conduit", "tmp")
 }

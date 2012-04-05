@@ -17,18 +17,26 @@ class BinarySpec extends FileSpecification {
   import lbyteString._
 
   "binary" should {
-    val bsi = lbyteStringInstance
+    val lbsi = lbyteStringInstance
+    val sbsi = byteString.byteStringInstance
     "stream a file in a Source" in {
       val bss: Stream[ByteString] = runResourceT(sourceFile[RTIO](random) %%== consume).unsafePerformIO
       val result = lbyteString.fromChunks(bss)
       val expected = lbyteString.readFile(random).unsafePerformIO
-      bsi.equal(result, expected)
+      lbsi.equal(result, expected)
     }
     "stream a file in a Source in multiple chunks" in {
       val bss: Stream[ByteString] = runResourceT(sourceFile[RTIO](random, 8) %%== consume).unsafePerformIO
       val result = lbyteString.fromChunks(bss)
       val expected = lbyteString.readFile(random).unsafePerformIO
-      bsi.equal(result, expected)
+      lbsi.equal(result, expected)
+    }
+    "stream a file in a Source in multiple chunks" in {
+      val tmp = tmpFile
+      runResourceT(sourceFile[RTIO](random) %%== sinkFile(tmp)).unsafePerformIO
+      val bs1 = byteString.readFile(random).unsafePerformIO
+      val bs2 = byteString.readFile(tmp).unsafePerformIO
+      sbsi.equal(bs1, bs2)
     }
   }
 }

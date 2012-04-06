@@ -57,7 +57,7 @@ trait ResourceTInstances extends ResourceTInstances0 {
 
     def liftBase[A](fa: => IO[A]) = fa
 
-    def liftBracket[A](init: IO[Unit], cleanup: IO[Unit], body: IO[A]): IO[A] = ExceptionControl.bracket_(init, cleanup, body)
+    def liftBracket[A](init: IO[Unit], cleanup: IO[Unit], body: IO[A]): IO[A] = IOUtils.bracket_(init, cleanup, body)
   }
 
 
@@ -70,7 +70,7 @@ trait ResourceTInstances extends ResourceTInstances0 {
     def release(rk: ReleaseKey) = ResourceT(kleisli(istate => F0.liftIO(resource.release(istate, rk))))
 
     def allocate[A](acquire: IO[A], rel: (A) => IO[Unit]) = ResourceT(kleisli(istate =>
-      F0.liftIO(ExceptionControl.mask[A, (ReleaseKey, A)](restore =>
+      F0.liftIO(IOUtils.mask[A, (ReleaseKey, A)](restore =>
         ioMonad.bind(restore(acquire))(a => ioMonad.map(resource.register(istate, rel(a)))(key => (key, a)))))))
   }
 }
@@ -97,7 +97,7 @@ trait ResourceTFunctions {
         (ReleaseMapOpen(next, rf, (m - rk.key)), Some(action))).getOrElse(rm, None)
       case ReleaseMapClosed => throw new InvalidAccess("release")
     }
-    ExceptionControl.mask[Unit, Unit](restore => {
+    IOUtils.mask[Unit, Unit](restore => {
       val maction: IO[Option[IO[Unit]]] = atomicModifyIORef(istate)(lookupAction)
       ioMonad.bind(maction)(mf => mf.map(a => restore(a)).getOrElse(ioMonad.point(())))
     })

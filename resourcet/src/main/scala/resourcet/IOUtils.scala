@@ -2,12 +2,14 @@ package resourcet
 
 import scalaz.effect.IO
 import IO.ioMonad
+import java.io.{FileOutputStream, File}
+import java.nio.channels.ByteChannel
 
 /**
  * User: arjan
  */
 
-object ExceptionControl {
+object IOUtils {
 
   def bracket[A, B, C](before: => IO[A], after: A => IO[B], thing: A => IO[C]): IO[C] = {
     mask[C, C](restore => {
@@ -26,4 +28,7 @@ object ExceptionControl {
     def restore(act: IO[A]): IO[A] = act
     action(restore)
   }
+
+  def withChannel[A](c: ByteChannel)(thing: ByteChannel => IO[A]): IO[A] = bracket[ByteChannel, Unit, A](IO(c), c => IO(c.close), thing)
+
 }

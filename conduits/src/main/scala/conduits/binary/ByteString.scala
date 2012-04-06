@@ -13,6 +13,7 @@ import scalaz.std.anyVal
 import byteString._
 import java.io.{FileOutputStream, FileInputStream, File}
 import scalaz.{CharSet, Show, Order, Monoid}
+import resourcet.IOUtils._
 
 /**
  * A strict ByteString, which stores [[java.lang.Byte]]'s in an Array.
@@ -38,7 +39,7 @@ final class ByteString(bytes: Array[Byte]) extends IndexedSeq[Byte] with Indexed
    */
   def writeContents(chan: ByteChannel): IO[Unit] =
     if (isEmpty) IO(())
-    else IO(chan.write(toByteBuffer)).flatMap(_ => IO(()))
+    else withChannel(chan)(c => IO(c.write(toByteBuffer)).flatMap(_ => IO(())))
 
   /**
    * Writes the contents of the this ByteString into the given File.

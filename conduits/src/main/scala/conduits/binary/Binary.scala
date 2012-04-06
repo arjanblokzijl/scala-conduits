@@ -33,7 +33,7 @@ object Binary {
     val M = MR.MO
     def pullUnlimited(c: FileChannel, key: ReleaseKey): F[Source[F, ByteString]] =
       MR.MO.bind(MR.MO.liftIO(byteString.getContents(c)))(bs =>
-        if (bs.isEmpty) M.map(MR.release(key))(_ => Done[Zero, ByteString, F, Unit](None, ()))
+        if (bs.isEmpty) M.map(MR.release(key))(_ => Done(None, ()))
         else M.point(HaveOutput(PipeM(pullUnlimited(c, key), MR.release(key)), MR.release(key), bs))
       )
 
@@ -41,7 +41,7 @@ object Binary {
       val c = math.min(i, byteString.DefaultChunkSize)
       MR.MO.bind(MR.MO.liftIO(byteString.getContents(fc, c)))(bs => {
         val c1 = c - bs.length
-        if (bs.isEmpty) M.map(MR.release(key))(_ => Done[Zero, ByteString, F, Unit](None, ()))
+        if (bs.isEmpty) M.map(MR.release(key))(_ => Done(None, ()))
         else M.point(HaveOutput(PipeM(pullLimited(c1, fc, key), MR.release(key)), MR.release(key), bs))
       })
     }

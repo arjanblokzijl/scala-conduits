@@ -38,5 +38,12 @@ class BinarySpec extends FileSpecification {
       val bs2 = byteString.readFile(tmp).unsafePerformIO
       sbsi.equal(bs1, bs2)
     }
+    "read range" in {
+      val tmp = tmpFile
+      val contents = byteString.fromString("0123456789").writeFile(tmp).unsafePerformIO
+      val bss = runResourceT(sourceFileRange[RTIO](tmp, Some(2), Some(4)) %%== consume).unsafePerformIO
+      val result = byteString.concat(bss)
+      sbsi.equal(result, byteString.fromString("2345"))
+    }
   }
 }

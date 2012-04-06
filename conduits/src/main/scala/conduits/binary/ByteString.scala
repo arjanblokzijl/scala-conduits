@@ -2,22 +2,21 @@ package conduits
 package binary
 
 import java.nio.ByteBuffer
-import java.io.{FileInputStream, File}
 import java.nio.channels.ByteChannel
 import scalaz.effect.IO
 import IO._
 import scala.io.Codec
 import collection.mutable.{ArrayBuilder, Builder}
-import scalaz.{Show, Order, Monoid}
 import collection.{Traversable, IndexedSeqOptimized}
 import collection.generic.CanBuildFrom
 import scalaz.std.anyVal
 import byteString._
+import java.io.{FileOutputStream, FileInputStream, File}
+import scalaz.{CharSet, Show, Order, Monoid}
 
 /**
- * User: arjan
+ * A strict ByteString, which stores [[java.lang.Byte]]'s in an Array.
  */
-
 final class ByteString(bytes: Array[Byte]) extends IndexedSeq[Byte] with IndexedSeqOptimized[Byte, ByteString] {
   private val arr = bytes.clone
   override protected[this] def newBuilder: Builder[Byte, ByteString] = ArrayBuilder.make[Byte]().mapResult(new ByteString(_))
@@ -41,9 +40,13 @@ final class ByteString(bytes: Array[Byte]) extends IndexedSeq[Byte] with Indexed
     if (isEmpty) IO(())
     else IO(chan.write(toByteBuffer)).flatMap(_ => IO(()))
 
+  /**
+   * Writes the contents of the this ByteString into the given File.
+   */
+  def writeFile(f: File): IO[Unit] = writeContents(new FileOutputStream(f).getChannel)
 }
 
-trait SByteStringInstances {
+trait ByteStringInstances {
   import byteString._
   implicit val byteStringInstance: Monoid[ByteString] with Order[ByteString] with Show[ByteString] = new Monoid[ByteString] with Order[ByteString] with Show[ByteString] {
     def show(f: ByteString) = f.toString.toList
@@ -72,7 +75,7 @@ trait SByteStringInstances {
   }
 }
 
-trait SByteStringFunctions {
+trait ByteStringFunctions {
   val DefaultChunkSize = 8*1024
   /** Converts a `java.nio.ByteBuffer` into a `ByteString`. */
   def fromByteBuffer(bytes: java.nio.ByteBuffer, size: Int = DefaultChunkSize): ByteString = {
@@ -81,6 +84,8 @@ trait SByteStringFunctions {
     bytes.get(ar)
     new ByteString(ar)
   }
+
+  def fromString(s: String): ByteString = new ByteString(s.getBytes(CharSet.UTF8))
 
   def cons(b: Byte, bs: ByteString): ByteString = new ByteString(b +: bs.toArray)
 
@@ -96,8 +101,13 @@ trait SByteStringFunctions {
   }
 
   def empty: ByteString = new ByteString(Array.empty[Byte])
+
   def singleton(b: Byte): ByteString = new ByteString(Array(b))
+
+  def concat(bss: Stream[ByteString]): ByteString =
+    bss.foldLeft[ByteString](empty)((bs1, bs2) => bs1.append(bs2))
+
 }
 
-object byteString extends SByteStringInstances with SByteStringFunctions
+object byteString extends ByteStringInstances with ByteStringFunctions
 

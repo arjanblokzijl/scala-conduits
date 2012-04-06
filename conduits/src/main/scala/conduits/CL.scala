@@ -3,6 +3,7 @@ package conduits
 import resourcet.resource
 import scalaz.std.stream._
 import scalaz._
+import collection.immutable.Stream
 
 /**
 * List like operations for conduits.
@@ -19,10 +20,6 @@ object CL {
    * A strict left fold.
    * @param z the starting value
    * @param f the binary operation applied to each value
-   * @param M the [[scalaz.Monad]] representing the effect
-   * @tparam F
-   * @tparam A
-   * @tparam B
    * @return the result of applying the binary operation to all elements of the stream plus the starting value.
    */
   def foldLeft[F[_], A, B](z: => B)(f: (B, A) => B)(implicit M: Monad[F]): Sink[A, F, B] = {
@@ -111,6 +108,16 @@ object CL {
       haveMore(NeedInput(push, close), M.point(()), f(i))
 
     NeedInput(push, close)
+  }
+
+  def groupBy[F[_], A](f: (A, A) => Boolean)(implicit M: Monad[F]): Conduit[A, F, Stream[A]] = {
+    def push(as: => Stream[A], v: => A): F[ConduitStateResult[Stream[A], A, Stream[A]]] = as match {
+      case Stream.Empty => M.point(StateProducing(Stream(v), Stream.Empty))
+      case s@(x #:: _) => if (f(x, v)) M.point(StateProducing(v #:: s, Stream.Empty))
+                          else M.point(StateProducing(Stream(v), Stream(s)))
+    }
+    def close(s: => Stream[A]) = M.point(Stream(s))
+    conduitState(Stream.empty, push, close)
   }
 
   def zip[F[_], A, B](f1: Source[F, A], f2: Source[F, B])(implicit M: Monad[F]): Source[F, (A, B)] = (f1, f2) match {

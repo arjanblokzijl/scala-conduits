@@ -2,6 +2,7 @@ package conduits
 
 import org.specs2.mutable.Specification
 import scalaz._
+import std.list._
 import std.anyVal._
 import effect.IO
 import effect.IO._
@@ -67,6 +68,12 @@ class ConduitSpec extends Specification with ScalaCheck {
                                 b <- consume[Id, Int]) yield (a, b)
       (sourceList[Id, Int](s) %%== headAndConsume)  must be_===((Some(0), Stream.from(1).take(4)))
     }
+    //TODO groupBy as in Haskell does not have a Scala equivalent, so no useful scalacheck immediately available
+    "groupBy" in {
+      val s = Stream(1, 1, 1, 2, 2, 2, 2, 3, 3, 4, 5)
+      ((CL.groupBy[Id, Int]((a, b) => a == b) %= sourceList(s)) %%== consume) must be_===(Stream(Stream(1, 1, 1), Stream(2, 2, 2, 2), Stream(3, 3), Stream(4), Stream(5)))
+    }
+
     "peek does not alter the inputstream" in {
       val s = Stream.from(0).take(5)
       val peekAndConsume = for (a <- peek[Id, Int];

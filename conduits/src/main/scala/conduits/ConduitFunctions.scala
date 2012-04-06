@@ -50,12 +50,12 @@ object ConduitFunctions {
    * Construct a 'Conduit' with some stateful functions. This function addresses
    * threading the state value for you.
    */
-  def conduitState[S, A, F[_], B](state: => S, push: (=> S) => (=> A) => F[ConduitStateResult[S, A, B]], close: (=> S) => F[Stream[B]])(implicit M: Monad[F]): Conduit[A, F, B] = {
-    def push1(state1: S)(input: A): Conduit[A, F, B] = PipeM(
-      M.map(push(state)(input))(r => goRes(r))
+  def conduitState[S, A, F[_], B](state: => S, push: (=> S, => A) => F[ConduitStateResult[S, A, B]], close: (=> S) => F[Stream[B]])(implicit M: Monad[F]): Conduit[A, F, B] = {
+    def push1(s: S)(input: A): Conduit[A, F, B] = PipeM(
+      M.map(push(s, input))(r => goRes(r))
       , M.point(()))
 
-    def close1(state: S): Pipe[A, B, F, Unit] = PipeM(M.bind(close(state))(os => M.point(fromList(os))), M.point(()))
+    def close1(s: S): Pipe[A, B, F, Unit] = PipeM(M.bind(close(s))(os => M.point(fromList(os))), M.point(()))
 
     def goRes(res: ConduitStateResult[S, A, B]): Conduit[A, F, B] = res.fold(
       finished = (leftover, output) => haveMore[A, F, B](Done(leftover, ()), M.point(()), output)

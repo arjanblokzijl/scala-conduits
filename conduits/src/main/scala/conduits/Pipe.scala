@@ -73,6 +73,10 @@ object Pipe {
 
   import FoldUtils._
 
+  /**
+   * Provide new output to be sent downstream. HaveOutput has three fields: the next
+   * pipe to be used, an early-close function and the output value.
+   */
   object HaveOutput {
     def apply[A, B, F[_], R](p: => Pipe[A, B, F, R], r: => F[R], b: => B) = new Pipe[A, B, F, R] {
       def fold[Z](haveOutput: (=> Pipe[A, B, F, R], => F[R], => B) => Z
@@ -85,6 +89,12 @@ object Pipe {
       p.fold((p, r, b) => Some(p, r, b), ToNone2, ToNone2, ToNone2)
   }
 
+  /**
+   * Request more input from upstream. The first field takes a new input value and provides a new Pipe.
+   * The second is for early termination: it gives a new Pipe that takes no input from upstream.
+   * This allows a Pipe to provide a final stream of output values after no more input is available
+   * from upstream.
+   */
   object NeedInput {
     def apply[A, B, F[_], R](aw: => A => Pipe[A, B, F, R], p: => Pipe[A, B, F, R]) = new Pipe[A, B, F, R] {
       def fold[Z](haveOutput: (=> Pipe[A, B, F, R], => F[R], => B) => Z
@@ -97,6 +107,10 @@ object Pipe {
       p.fold(ToNone3, (f, p) => Some(f, p), ToNone2, ToNone2)
   }
 
+  /**
+   * The processing of this Pipe is complete. The first field provides an (optional) leftover
+   * input value, and the second field provides the final result.
+   */
   object Done {
     def apply[A, B, F[_], R](i: => Option[A], r: => R) = new Pipe[A, B, F, R] {
       def fold[Z](haveOutput: (=> Pipe[A, B, F, R], => F[R], => B) => Z
@@ -109,6 +123,10 @@ object Pipe {
       p.fold(ToNone3, ToNone2, (i, r) => Some(i, r), ToNone2)
   }
 
+  /**
+   * Require running of a monadic action to get the next Pipe. The first field represents
+   * this action, and the second field provides an early cleanup function.
+   */
   object PipeM {
     def apply[A, B, F[_], R](pm: => F[Pipe[A, B, F, R]], fr: => F[R]) = new Pipe[A, B, F, R] {
       def fold[Z](haveOutput: (=> Pipe[A, B, F, R], => F[R], => B) => Z
@@ -120,7 +138,6 @@ object Pipe {
     def unapply[A, B, F[_], R](p: Pipe[A, B, F, R]): Option[(F[Pipe[A, B, F, R]], F[R])] =
       p.fold(ToNone3, ToNone2, ToNone2, (i, r) => Some(i, r))
   }
-
 }
 
 
@@ -137,9 +154,6 @@ trait PipeInstances {
     def liftM[G[_], A](ga: G[A])(implicit M: Monad[G]): Pipe[I, O, G, A] = PipeM(M.map(ga)(a => pipeMonad[I, O, G].point(a)), ga)
   }
 
-//instance Monad m => Monoid (Pipe i o m ()) where
-//    mempty = return ()
-//    mappend = (>>)
   implicit def pipeMonoid[A, B, F[_]](implicit F: Monad[F]): Monoid[Pipe[A, B, F, Unit]] = new Monoid[Pipe[A, B, F, Unit]] {
     def zero = pipeMonad[A, B, F].point(())
 
@@ -148,29 +162,48 @@ trait PipeInstances {
 }
 
 trait PipeFunctions {
+  /**
+   * Composes two pipes together into a complete Pipe. The left Pipe will
+   * be automatically closed when the right Pipe finishes. Any leftovers from the right
+   * Pipe are discarded on finishing.
+   */
   def pipe[A, B, C, F[_], R](p1: => Pipe[A, B, F, Unit], p2: => Pipe[B, C, F, R])(implicit F: Monad[F]): Pipe[A, C, F, R] =
     pipeResume(p1, p2) flatMap (pr =>
       pipeMonadTrans.liftM(pr._1.pipeClose) flatMap (_ => pipes.pipeMonad[A, C, F].point(pr._2))
     )
 
+  /**
+   * Similar to `pipe` but retain both the left pipe and any leftovers from the right pipe. The two components
+   * are combined into a single new Pipe and returned, together with the result of the right pipe.
+   *
+   * Composition is biased towards checking the right Pipe first to avoid pulling
+   * data that is not needed. Doing so could cause data loss.
+   */
   def pipeResume[A, B, C, F[_], R](p1: => Pipe[A, B, F, Unit], p2: => Pipe[B, C, F, R])(implicit F: Monad[F]): Pipe[A, C, F, (Pipe[A, B, F, Unit], R)] = (p1, p2) match {
+    //both pipes finished, return leftover of left pipe and leftovers of right pipe in the result.
     case (Done(leftoverl, ()), Done(leftoverr, r)) => leftoverr match {
       case None => Done(leftoverl, (pipes.pipeMonad[A, B, F].point(()), r))
       case Some(i) => Done(leftoverl, (HaveOutput(Done(None, ()), F.point(()), i), r))
     }
+    //right pipe is done, terminate and return leftovers.
     case (left, Done(leftoverr, r)) => leftoverr match {
       case None => Done(None, (left, r))
       case Some(i) => Done(None, (HaveOutput(left, left.pipeClose, i), r))
     }
+    //left pipe needs input, ask for it
     case (NeedInput(p, c), right) => NeedInput(a => pipeResume(p(a), right)
       , pipeResume(c, right).flatMap(pr => {
         pipeMonadTrans.liftM(pr._1.pipeClose)
         pipes.pipeMonad[A, C, F].point((pipes.pipeMonad[A, B, F].point(()), pr._2))
       }))
+    //left pipe has output, right pipe wants it
     case (HaveOutput(lp, _, a), NeedInput(rp, _)) => pipeResume(lp, rp(a))
     //right pipe needs to run a monadic action
     case (left, PipeM(mp, c)) => PipeM(F.map(mp)(p => pipeResume(left, p)), F.map(c)(r => (left, r)))
+      //right Pipe has some output, provide it downstream and continue.
     case (left, HaveOutput(p, c, o)) => HaveOutput(pipeResume(left, p), F.map(c)(r => (left, r)), o)
+    //left pipe is Done, right pipe needs input. Tell the right pipe there is no more input
+    //eventually replace its leftovers with the left pipe leftover
     case (Done(l, ()), NeedInput(_, c)) => replaceLeftOver(l, c).map(r => (pipes.pipeMonad[A, B, F].point(()), r))
     //left pipe needs to run a monadic action
     case (PipeM(mp, c), right) => PipeM(F.map(mp)(p => pipeResume(p, right))
@@ -180,7 +213,7 @@ trait PipeFunctions {
     case _ => sys.error("TODO")
   }
 
-  def replaceLeftOver[A, B, C, F[_], R](l: => Option[A], p1: => Pipe[C, B, F, R])(implicit F: Monad[F]): Pipe[A, B, F, R] = p1.fold(
+  private def replaceLeftOver[A, B, C, F[_], R](l: => Option[A], p1: => Pipe[C, B, F, R])(implicit F: Monad[F]): Pipe[A, B, F, R] = p1.fold(
     haveOutput = (p, c, o) => HaveOutput(replaceLeftOver(l, p), c, o)
     , needInput = (_, c) => replaceLeftOver(l, c)
     , done = (_, r) => Done(l, r)

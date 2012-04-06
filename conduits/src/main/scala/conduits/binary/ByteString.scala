@@ -37,14 +37,14 @@ final class ByteString(bytes: Array[Byte]) extends IndexedSeq[Byte] with Indexed
   /**
    * Writes the contents of the this ByteString into the given ByteChannel.
    */
-  def writeContents(chan: ByteChannel): IO[Unit] =
+  def writeContents(os: FileOutputStream): IO[Unit] =
     if (isEmpty) IO(())
-    else withChannel(chan)(c => IO(c.write(toByteBuffer)).flatMap(_ => IO(())))
+    else withFile(os)(s => IO(s.getChannel.write(toByteBuffer)) flatMap(_ => IO(())))
 
   /**
    * Writes the contents of the this ByteString into the given File.
    */
-  def writeFile(f: File): IO[Unit] = writeContents(new FileOutputStream(f).getChannel)
+  def writeFile(f: File): IO[Unit] = writeContents(new FileOutputStream(f))
 }
 
 trait ByteStringInstances {

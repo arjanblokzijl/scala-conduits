@@ -29,6 +29,6 @@ object IOUtils {
     action(restore)
   }
 
-  def withChannel[A](c: ByteChannel)(thing: ByteChannel => IO[A]): IO[A] = bracket[ByteChannel, Unit, A](IO(c), c => IO(c.close), thing)
+  def withFile[A](f: FileOutputStream)(thing: FileOutputStream => IO[A]): IO[A] = bracket[FileOutputStream, Unit, A](IO(f), f => IO(f.close), thing)
 
 }

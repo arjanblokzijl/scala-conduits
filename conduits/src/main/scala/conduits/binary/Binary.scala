@@ -60,7 +60,7 @@ object Binary {
   private def sinkIOStream[F[_]](fs: IO[FileOutputStream])(implicit MR: MonadResource[F]): Sink[ByteString, F, Unit] = {
     implicit val M = MR.MO
     sinkIO[F, ByteString, Unit, java.io.FileOutputStream](fs, s => IO(s.close), f => bs =>
-      M.map(M.liftIO(bs.writeContents(f.getChannel)))(_ => IOProcessing.apply), _ => M.point(()))
+      M.map(M.liftIO(bs.writeContents(f)))(_ => IOProcessing.apply), _ => M.point(()))
   }
 
   def conduitFile[F[_]](f: File)(implicit MR: MonadResource[F]): Conduit[ByteString, F, ByteString] =
@@ -69,6 +69,6 @@ object Binary {
   private def conduitStream[F[_]](fs: IO[FileOutputStream])(implicit MR: MonadResource[F]): Conduit[ByteString, F, ByteString] = {
     implicit val M = MR.MO
     conduitIO[F, ByteString, ByteString, java.io.FileOutputStream](fs, s => IO(s.close), f => bs =>
-      M.map(M.liftIO(bs.writeContents(f.getChannel)))(_ => IOProducing(Stream(bs))), _ => M.point(Stream.empty))
+      M.map(M.liftIO(bs.writeContents(f)))(_ => IOProducing(Stream(bs))), _ => M.point(Stream.empty))
   }
 }

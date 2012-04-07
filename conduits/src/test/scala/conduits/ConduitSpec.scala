@@ -8,7 +8,8 @@ import effect.IO
 import effect.IO._
 import scalaz.Id
 import org.scalacheck.Arbitrary._
-
+import pipes._
+import ConduitFunctions._
 import CL._
 import org.specs2.ScalaCheck
 import Conduits._
@@ -61,6 +62,11 @@ class ConduitSpec extends Specification with ScalaCheck {
       (sourceList[Id, Int](stream) %%== head)  must be_===(stream.headOption)
   }
 
+  "sequence sink" ! check {
+    (stream: Stream[Int]) =>
+    (sourceList[Id, Int](stream) %= sequence(consume) %%== consume).flatten must be_==(stream)
+  }
+
   "conduits" should {
     "head removes the first element from the inputstream" in {
       val s = Stream.from(0).take(5)
@@ -92,6 +98,19 @@ class ConduitSpec extends Specification with ScalaCheck {
 
       val res = (sourceList[Id, Int](s) %= sequence(sumSink) %%== consume)
       res must be_==(Stream(3, 7, 11, 15, 19, 11))
+    }
+    
+    "sequence with unpull behaviour" in {
+      import pipes._
+      import ConduitFunctions._
+      val s = Stream.from(1).take(11)
+      val sumSink: Sink[Int, Id, Int] = head[Id, Int] flatMap(ma => ma match {
+        case Some(i) => peek[Id, Int].map(mi => i + mi.getOrElse(0))
+        case None => pipeMonad[Int, Zero, Id].point(0)
+      })
+
+      val res = (sourceList[Id, Int](s) %= sequence(sumSink) %%== consume)
+      res must be_==(Stream(3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 11))
     }
   }
 }

@@ -17,10 +17,6 @@ trait ConduitIOResult[A, B] {
   def fold[Z](finished: (=> Option[A], => Stream[B]) => Z, producing: (=> Stream[B]) => Z): Z
 }
 
-//data SequencedSinkResponse state input m output =
-//    Emit state [output] -- ^ Set a new state, and emit some new output.
-//  | Stop -- ^ End the conduit.
-//  | StartConduit (Conduit input m output) -- ^ Pass control to a new conduit.
 trait SequencedSinkResponse[S, F[_], A, B] {
   def fold[Z](emit: (=> S, => Stream[B]) => Z, stop: => Z, startConduit: (=> Conduit[A, F, B]) => Z): Z
 }
@@ -85,15 +81,14 @@ object ConduitFunctions {
    * threading the state value for you.
    */
   def conduitState[S, A, F[_], B](state: => S, push: (=> S, => A) => F[ConduitStateResult[S, A, B]], close: (=> S) => F[Stream[B]])(implicit M: Monad[F]): Conduit[A, F, B] = {
-    def push1(s: S)(input: A): Conduit[A, F, B] = PipeM(
-      M.map(push(s, input))(r => goRes(r))
-      , M.point(()))
+    def push1(s: => S)(input: A): Conduit[A, F, B] =
+      PipeM(M.map(push(s, input))(r => goRes(r)), M.point(()))
 
     def close1(s: S): Pipe[A, B, F, Unit] = PipeM(M.bind(close(s))(os => M.point(fromList(os))), M.point(()))
 
     def goRes(res: ConduitStateResult[S, A, B]): Conduit[A, F, B] = res.fold(
       finished = (leftover, output) => haveMore[A, F, B](Done(leftover, ()), M.point(()), output)
-     , producing = (state, output) => haveMore[A, F, B](NeedInput(push1(state), close1(state)), M.point(()), output)
+     , producing = (s, output) => haveMore[A, F, B](NeedInput(push1(s), close1(s)), M.point(()), output)
     )
     NeedInput(push1(state), close1(state))
   }

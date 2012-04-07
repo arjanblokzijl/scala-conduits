@@ -86,6 +86,11 @@ class ConduitSpec extends Specification with ScalaCheck {
       val s = Stream(1, 1, 1, 2, 2, 2, 2, 3, 3, 4, 5)
       ((CL.groupBy[Id, Int]((a, b) => a == b) %= sourceList(s)) %%== consume) must be_===(Stream(Stream(1, 1, 1), Stream(2, 2, 2, 2), Stream(3, 3), Stream(4), Stream(5)))
     }
+    "isolate" in {
+      val s = Stream.from(0)
+      val res = (sourceList[Id, Int](s) %= isolate(10) %%== consume)
+      res must be_===(s.take(10))
+    }
   }
 
   "sequence" should {

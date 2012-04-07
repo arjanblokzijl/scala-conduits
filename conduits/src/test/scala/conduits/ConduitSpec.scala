@@ -117,9 +117,9 @@ class ConduitSpec extends Specification with ScalaCheck {
   }
 
   "sequenceSink" should {
+    import SequencedSinkResponse._
+    import Pipe._
     "simple sink" in {
-      import SequencedSinkResponse._
-      import Pipe._
       val s = Stream.from(1).take(11)
       val sink: Sink[Int, Id, SequencedSinkResponse[Unit, Id, Int, Int]] = for {
         _ <- drop[Id, Int](2)
@@ -128,7 +128,24 @@ class ConduitSpec extends Specification with ScalaCheck {
 
       val res = (sourceList[Id, Int](s) %= sequenceSink((), (_: Unit) => sink) %%== consume)
       res must be_==(Stream(3, 6, 9))
-      success
+    }
+    "finishes on new state" in {
+      val s = Stream.from(1).take(11)
+      val sink: Sink[Int, Id, SequencedSinkResponse[Unit, Id, Int, Int]] = for {
+        x <- head[Id, Int]
+      } yield (Emit[Unit, Id, Int, Int]((), x.map(Stream(_)).getOrElse(Stream.Empty)))
+
+      val res = (sourceList[Id, Int](s) %= sequenceSink((), (_: Unit) => sink) %%== consume)
+      res must be_==(s)
+    }
+    "switch to a conduit" in {
+      val s = Stream.from(1).take(11)
+      val sink: Sink[Int, Id, SequencedSinkResponse[Unit, Id, Int, Int]] = for {
+        _ <- drop[Id, Int](4)
+      } yield (StartConduit[Unit, Id, Int, Int](filter(i => i % 2 == 0)))
+
+      val res = (sourceList[Id, Int](s) %= sequenceSink((), (_: Unit) => sink) %%== consume)
+      res must be_==(Stream(6, 8, 10))
     }
   }
 }

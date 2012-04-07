@@ -145,9 +145,9 @@ object ConduitFunctions {
    * Convert a `SequencedSink` into a Conduit.
    */
   def sequenceSink[S, A, F[_], B](state: => S, fsink: SequencedSink[S, A, F, B])(implicit M: Monad[F]): Conduit[A, F, B] = {
-    hasInput[A, B, F].flatMap(x =>
+    hasInput[A, B, F] flatMap(x =>
       if (x)
-        sinkToPipe(fsink(state)).flatMap(res => res match {
+        sinkToPipe(fsink(state)) flatMap(res => res match {
           case Emit(s1, os) => fromList[A, F, B](os).flatMap(_ => sequenceSink(s1, fsink))
           case Stop() => pipeMonad[A, B, F].point(())
           case StartConduit(c) => c
@@ -156,11 +156,10 @@ object ConduitFunctions {
     )
   }
 
-  def sequence[A, F[_], B](sink: Sink[A, F, B])(implicit M: Monad[F]): Conduit[A, F, B] = {
-    hasInput[A, B, F].flatMap(x =>
+  def sequence[A, F[_], B](sink: Sink[A, F, B])(implicit M: Monad[F]): Conduit[A, F, B] =
+    hasInput[A, B, F] flatMap(x =>
       if (x)
-        sinkToPipe(sink).flatMap(b => yieldp(b))
-      else sequence(sink)
+        sinkToPipe(sink) flatMap(b => yieldp[A, B, F](b).flatMap(_ => sequence(sink)))
+      else pipeMonad[A, B, F].point(())
     )
-  }
 }

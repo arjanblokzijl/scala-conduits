@@ -68,17 +68,30 @@ class ConduitSpec extends Specification with ScalaCheck {
                                 b <- consume[Id, Int]) yield (a, b)
       (sourceList[Id, Int](s) %%== headAndConsume)  must be_===((Some(0), Stream.from(1).take(4)))
     }
+    "peek does not alter the inputstream" in {
+      val s = Stream.from(0).take(5)
+      val peekAndConsume = for (a <- peek[Id, Int];
+                                b <- consume[Id, Int]) yield (a, b)
+      (sourceList[Id, Int](s) %%== peekAndConsume)  must be_===((Some(0), Stream.from(0).take(5)))
+    }
+
     //TODO groupBy as in Haskell does not have a Scala equivalent, so no useful scalacheck immediately available
     "groupBy" in {
       val s = Stream(1, 1, 1, 2, 2, 2, 2, 3, 3, 4, 5)
       ((CL.groupBy[Id, Int]((a, b) => a == b) %= sourceList(s)) %%== consume) must be_===(Stream(Stream(1, 1, 1), Stream(2, 2, 2, 2), Stream(3, 3), Stream(4), Stream(5)))
     }
 
-    "peek does not alter the inputstream" in {
-      val s = Stream.from(0).take(5)
-      val peekAndConsume = for (a <- peek[Id, Int];
-                                b <- consume[Id, Int]) yield (a, b)
-      (sourceList[Id, Int](s) %%== peekAndConsume)  must be_===((Some(0), Stream.from(0).take(5)))
+    "sequence simple sink" in {
+      import pipes._
+      import ConduitFunctions._
+      val s = Stream.from(1).take(11)
+      val sumSink: Sink[Int, Id, Int] = head[Id, Int] flatMap(ma => ma match {
+        case Some(i) => head[Id, Int].map(mi => i + mi.getOrElse(0))
+        case None => pipeMonad[Int, Zero, Id].point(0)
+      })
+
+      val res = (sourceList[Id, Int](s) %= sequence(sumSink) %%== consume)
+      res must be_==(Stream(3, 7, 11, 15, 19, 11))
     }
   }
 }

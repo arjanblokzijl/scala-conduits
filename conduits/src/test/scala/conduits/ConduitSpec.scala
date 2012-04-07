@@ -86,8 +86,10 @@ class ConduitSpec extends Specification with ScalaCheck {
       val s = Stream(1, 1, 1, 2, 2, 2, 2, 3, 3, 4, 5)
       ((CL.groupBy[Id, Int]((a, b) => a == b) %= sourceList(s)) %%== consume) must be_===(Stream(Stream(1, 1, 1), Stream(2, 2, 2, 2), Stream(3, 3), Stream(4), Stream(5)))
     }
+  }
 
-    "sequence simple sink" in {
+  "sequence" should {
+    "simple sink" in {
       import pipes._
       import ConduitFunctions._
       val s = Stream.from(1).take(11)
@@ -111,6 +113,22 @@ class ConduitSpec extends Specification with ScalaCheck {
 
       val res = (sourceList[Id, Int](s) %= sequence(sumSink) %%== consume)
       res must be_==(Stream(3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 11))
+    }
+  }
+
+  "sequenceSink" should {
+    "simple sink" in {
+      import SequencedSinkResponse._
+      import Pipe._
+      val s = Stream.from(1).take(11)
+      val sink: Sink[Int, Id, SequencedSinkResponse[Unit, Id, Int, Int]] = for {
+        _ <- drop[Id, Int](2)
+        x <- head[Id, Int]
+      } yield (Emit[Unit, Id, Int, Int]((), x.map(Stream(_)).getOrElse(Stream.Empty)))
+
+      val res = (sourceList[Id, Int](s) %= sequenceSink((), (_: Unit) => sink) %%== consume)
+      res must be_==(Stream(3, 6, 9))
+      success
     }
   }
 }

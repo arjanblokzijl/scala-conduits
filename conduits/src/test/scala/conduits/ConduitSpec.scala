@@ -99,7 +99,7 @@ class ConduitSpec extends Specification with ScalaCheck {
       val res = (sourceList[Id, Int](s) %= sequence(sumSink) %%== consume)
       res must be_==(Stream(3, 7, 11, 15, 19, 11))
     }
-    
+
     "sequence with unpull behaviour" in {
       import pipes._
       import ConduitFunctions._

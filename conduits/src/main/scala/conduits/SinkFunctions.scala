@@ -86,6 +86,7 @@ object SinkFunctions {
     def close1(key: ReleaseKey)(state: S): F[B] = {
       M.bind(close(state))(res => M.bind(M0.release(key))(_ => M.point(res)))
     }
+
     NeedInput(input =>
               PipeM(M.bind(M0.allocate(alloc, cleanup))(ks => push1(ks._1)(ks._2)(input))
                 , M.bind(M0.allocate(alloc, cleanup))(ks => close1(ks._1)(ks._2)))

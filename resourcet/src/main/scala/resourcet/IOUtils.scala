@@ -12,13 +12,11 @@ import java.nio.channels.ByteChannel
 object IOUtils {
 
   def bracket[A, B, C](before: => IO[A], after: A => IO[B], thing: A => IO[C]): IO[C] = {
-    mask[C, C](restore => {
-      ioMonad.bind(before)(a =>
-        ioMonad.bind(restore(thing(a) onException (after(a))))(r =>
-          ioMonad.bind(after(a))(_ => ioMonad.point(r))
-        )
-      )
-    })
+    mask[C, C](restore => for {
+      a <- before
+      r <- restore(thing(a)) onException (after(a))
+      _ <- after(a)
+    } yield (r))
   }
 
   def bracket_[A, B, C](before: IO[A], after: IO[B], thing: IO[C]): IO[C] =

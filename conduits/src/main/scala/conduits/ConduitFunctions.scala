@@ -17,7 +17,41 @@ trait ConduitIOResult[A, B] {
   def fold[Z](finished: (=> Option[A], => Stream[B]) => Z, producing: (=> Stream[B]) => Z): Z
 }
 
+//data SequencedSinkResponse state input m output =
+//    Emit state [output] -- ^ Set a new state, and emit some new output.
+//  | Stop -- ^ End the conduit.
+//  | StartConduit (Conduit input m output) -- ^ Pass control to a new conduit.
+trait SequencedSinkResponse[S, F[_], A, B] {
+  def fold[Z](emit: (=> S, => Stream[B]) => Z, stop: => Z, startConduit: (=> Conduit[A, F, B]) => Z): Z
+}
+
+object SequencedSinkResponse {
+  import FoldUtils._
+  //Set a new state and emit some output
+  object Emit {
+    def apply[S, F[_], A, B](s: => S, output: => Stream[B]) = new SequencedSinkResponse[S, F, A, B] {
+      def fold[Z](emit: (=> S, => Stream[B]) => Z, stop: => Z, startConduit: (=> Conduit[A, F, B]) => Z): Z = emit(s, output)
+    }
+    def unapply[S, F[_], A, B](s: SequencedSinkResponse[S, F, A, B]): Option[(S, Stream[B])] = s.fold((s, o) => Some(s, o), None, ToNone1)
+  }
+  //End the Conduit
+  object Stop {
+    def apply[S, F[_], A, B]() = new SequencedSinkResponse[S, F, A, B] {
+      def fold[Z](emit: (=> S, => Stream[B]) => Z, stop: => Z, startConduit: (=> Conduit[A, F, B]) => Z): Z = stop
+    }
+    def unapply[S, F[_], A, B](s: SequencedSinkResponse[S, F, A, B]): Boolean = s.fold((_,_) => false, true, _ => false)
+  }
+  //Pass control to a new Conduit.
+  object StartConduit {
+    def apply[S, F[_], A, B](c: Conduit[A, F, B]) = new SequencedSinkResponse[S, F, A, B] {
+      def fold[Z](emit: (=> S, => Stream[B]) => Z, stop: => Z, startConduit: (=> Conduit[A, F, B]) => Z): Z = startConduit(c)
+    }
+    def unapply[S, F[_], A, B](s: SequencedSinkResponse[S, F, A, B]): Option[Conduit[A, F, B]] = s.fold(ToNone2, None, Some(_))
+  }
+}
+
 object ConduitFunctions {
+
   import FoldUtils._
   object StateFinished {
     def apply[S, A, B](maybeInput: => Option[A], output: => Stream[B]) = new ConduitStateResult[S, A, B] {
@@ -94,8 +128,39 @@ object ConduitFunctions {
     case x #:: xs => HaveOutput(haveMore(res, close, xs), close, x)
   }
 
-  def fromList[F[_], A, I](as: Stream[A])(implicit M: Monad[F]): Pipe[I, A, F, Unit] = as match {
+  def fromList[A, F[_], B](bs: Stream[B])(implicit M: Monad[F]): Pipe[A, B, F, Unit] = bs match {
     case Stream.Empty => Done(None, ())
-    case x #:: xs => HaveOutput[I, A, F, Unit](fromList(xs), M.point(()), x)
+    case x #:: xs => HaveOutput[A, B, F, Unit](fromList(xs), M.point(()), x)
+  }
+
+  import SequencedSinkResponse._
+  /**
+   * Helper type for constructing a Conduit based on Sinks. Allows
+   * writing higher level code.
+   */
+  type SequencedSink[S, A, F[_], B] = S => Sink[A, F, SequencedSinkResponse[S, F, A, B]]
+
+//  -- | Convert a 'SequencedSink' into a 'Conduit'.
+  /**
+   * Convert a `SequencedSink` into a Conduit.
+   */
+  def sequenceSink[S, A, F[_], B](state: => S, fsink: SequencedSink[S, A, F, B])(implicit M: Monad[F]): Conduit[A, F, B] = {
+    hasInput[A, B, F].flatMap(x =>
+      if (x)
+        sinkToPipe(fsink(state)).flatMap(res => res match {
+          case Emit(s1, os) => fromList[A, F, B](os).flatMap(_ => sequenceSink(s1, fsink))
+          case Stop() => pipeMonad[A, B, F].point(())
+          case StartConduit(c) => c
+        })
+      else pipeMonad[A, B, F].point(())
+    )
+  }
+
+  def sequence[A, F[_], B](sink: Sink[A, F, B])(implicit M: Monad[F]): Conduit[A, F, B] = {
+    hasInput[A, B, F].flatMap(x =>
+      if (x)
+        sinkToPipe(sink).flatMap(b => yieldp(b))
+      else sequence(sink)
+    )
   }
 }

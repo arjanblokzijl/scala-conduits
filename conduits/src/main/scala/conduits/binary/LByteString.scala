@@ -37,6 +37,17 @@ sealed trait LByteString {
    */
   def #::(b: => Byte): LByteString = Chunk(byteString.singleton(b), this)
 
+  def head: Byte = this match {
+    case Empty() => sys.error("head on empty LByteString")
+    case Chunk(c, cs) => c.head
+  }
+
+  def tail: LByteString = this match {
+    case Empty() => sys.error("tail on empty LByteString")
+    case Chunk(c, cs) => if (c.length == 1) cs
+                         else Chunk(c.tail, cs)
+  }
+
   /**
    * A stricter version of cons, evaluating the first chunk to see whether it is more efficient to
    * coalesce the byte into this chunk rather than to create a new chunk by default.

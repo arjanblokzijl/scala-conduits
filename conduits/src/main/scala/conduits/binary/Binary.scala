@@ -82,4 +82,16 @@ object Binary {
     NeedInput(push, close)
   }
 
+  def isolate[F[_]](count: Int)(implicit M: Monad[F]): Conduit[ByteString, F, ByteString] = {
+    def close(s: => Int): F[Stream[ByteString]] = M.point(Stream.Empty)
+    def push(c: => Int, bs: => ByteString): F[ConduitStateResult[Int, ByteString, ByteString]] =
+      if (c <= 0) M.point(StateFinished(Some(bs), Stream.Empty))
+      else {
+        val (a, b) = bs.splitAt(c)
+        val c1 = c - a.length
+        M.point(if (c1 <= 0) StateFinished(if (b.isEmpty) None else Some(b), if (a.isEmpty) Stream.Empty else Stream(a))
+        else StateProducing(c1, Stream(a)))
+      }
+    conduitState(count, push, close)
+  }
 }

@@ -139,14 +139,13 @@ object CL {
    */
   def isolate[F[_], A](count: Int)(implicit M: Monad[F]): Conduit[A, F, A] = {
     def close(s: => Int): F[Stream[A]] = M.point(Stream.Empty)
-    def push(c: => Int, x: => A): F[ConduitStateResult[Int, A, A]] = {
+    def push(c: => Int, x: => A): F[ConduitStateResult[Int, A, A]] =
       if (c <= 0) M.point(StateFinished(Some(x), Stream.Empty))
       else {
         val c1 = c - 1
         if (c1 <= 0) M.point(StateFinished(None, Stream(x)))
         else M.point(StateProducing(c1, Stream(x)))
       }
-    }
     conduitState(count, push, close)
   }
 }

@@ -10,6 +10,7 @@ import scalaz.effect.IO
 import java.io.{FileOutputStream, FileInputStream, File}
 import java.nio.channels.FileChannel
 import resourcet.{ReleaseKey, MonadResource}
+import scalaz.Monad
 
 /**
  * User: arjan
@@ -71,4 +72,14 @@ object Binary {
     conduitIO[F, ByteString, ByteString, java.io.FileOutputStream](fs, s => IO(s.close), f => bs =>
       M.map(M.liftIO(bs.writeContents(f)))(_ => IOProducing(Stream(bs))), _ => M.point(Stream.empty))
   }
+
+  def head[F[_]](implicit M: Monad[F]): Sink[ByteString, F, Option[Byte]] = {
+    def push(bs: ByteString): Sink[ByteString, F, Option[Byte]] = bs.uncons match {
+      case None => NeedInput(push, close)
+      case Some((b, bs1)) => Done(if (bs1.isEmpty) None else Some(bs1), Some(b))
+    }
+    def close: Sink[ByteString, F, Option[Byte]] = pipeMonad[ByteString, Zero, F].point(None)
+    NeedInput(push, close)
+  }
+
 }

@@ -50,6 +50,11 @@ sealed trait LByteString {
   def append(ys: => LByteString): LByteString = fold(empty = ys, chunk = (sb, lb) =>
     Chunk(sb, lb append ys)
   )
+
+  def uncons: Option[(Byte, LByteString)] = this match {
+    case Empty() => None
+    case Chunk(c, cs) => Some(c.head, if (c.length == 1) cs else Chunk(c.tail, cs))
+  }
 }
 
 object LByteString {

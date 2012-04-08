@@ -24,6 +24,8 @@ final class ByteString(bytes: Array[Byte]) extends IndexedSeq[Byte] with Indexed
 
   def &:(b: Byte): ByteString = cons(b, this)
 
+  def uncons: Option[(Byte, ByteString)] = if (isEmpty) None else Some(arr.head, new ByteString(arr.tail))
+
   def apply(idx: Int) = arr(idx)
 
   def length = arr.length
@@ -87,6 +89,8 @@ trait ByteStringFunctions {
   }
 
   def fromString(s: String): ByteString = new ByteString(s.getBytes(CharSet.UTF8))
+
+//  def pack(bs: Stream[Byte]): ByteString = new ByteString(s.getBytes(CharSet.UTF8))
 
   def cons(b: Byte, bs: ByteString): ByteString = new ByteString(b +: bs.toArray)
 

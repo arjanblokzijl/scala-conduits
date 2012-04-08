@@ -12,9 +12,16 @@ import CL._
 import Binary._
 
 import Conduits._
+import org.specs2.ScalaCheck
+import ConduitArbitrary._
 
-class BinarySpec extends FileSpecification {
+class BinarySpec extends FileSpecification with ScalaCheck {
   import lbyteString._
+
+  "binary head" ! check { (bs: ByteString) =>
+    val res = sourceList[Id, ByteString](Stream(bs)) %%== Binary.head
+    bs.headOption mustEqual(res)
+  }
 
   "binary" should {
     val lbsi = lbyteStringInstance
@@ -40,7 +47,7 @@ class BinarySpec extends FileSpecification {
     }
     "read range" in {
       val tmp = tmpFile
-      val contents = byteString.fromString("0123456789").writeFile(tmp).unsafePerformIO
+      byteString.fromString("0123456789").writeFile(tmp).unsafePerformIO
       val bss = runResourceT(sourceFileRange[RTIO](tmp, Some(2), Some(4)) %%== consume).unsafePerformIO
       val result = byteString.concat(bss)
       sbsi.equal(result, byteString.fromString("2345"))

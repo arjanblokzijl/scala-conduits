@@ -70,23 +70,22 @@ sealed trait LByteString {
   def takeWhile(p: Byte => Boolean): LByteString = this match {
     case Empty() => Empty.apply
     case Chunk(c, cs) => {
-      val bs = c.takeWhile(p)
+      val bs = c takeWhile p
       if (bs.isEmpty) Empty.apply
-      else if (bs.length == c.length) Chunk(c, cs.takeWhile(p))
+      else if (bs.length == c.length) Chunk(c, cs takeWhile p)
       else Chunk(bs, Empty.apply)
     }
   }
-//-- | 'takeWhile', applied to a predicate @p@ and a ByteString @xs@,
-//-- returns the longest prefix (possibly empty) of @xs@ of elements that
-//-- satisfy @p@.
-//takeWhile :: (Word8 -> Bool) -> ByteString -> ByteString
-//takeWhile f cs0 = takeWhile' cs0
-//  where takeWhile' Empty        = Empty
-//        takeWhile' (Chunk c cs) =
-//          case findIndexOrEnd (not . f) c of
-//            0                  -> Empty
-//            n | n < S.length c -> Chunk (S.take n c) Empty
-//              | otherwise      -> Chunk c (takeWhile' cs)
+
+  def dropWhile(p: Byte => Boolean): LByteString = this match {
+    case Empty() => Empty.apply
+    case Chunk(c, cs) => {
+      val bs = c dropWhile p
+      if (bs.isEmpty)  Empty.apply
+      else if (bs.length == c.length) Chunk(bs, cs dropWhile p)
+      else Chunk(bs, cs)
+    }
+  }
 }
 
 object LByteString {
@@ -141,24 +140,24 @@ trait LByteStringFunctions {
 
 trait LByteStringInstances {
   implicit val lbyteStringInstance: Monoid[LByteString] with Order[LByteString] with Show[LByteString] = new Monoid[LByteString] with Order[LByteString] with Show[LByteString]  {
-    def show(f: LByteString) = f.toString.toList
+    def show(f: LByteString) = f.toString.toList //TODO makes no sense
 
-      def append(f1: LByteString, f2: => LByteString) = f1 append f2
+    def append(f1: LByteString, f2: => LByteString) = f1 append f2
 
-      def zero: LByteString = lbyteString.empty
+    def zero: LByteString = lbyteString.empty
 
-      def order(xs: LByteString, ys: LByteString): scalaz.Ordering = (xs, ys) match {
-        case (Empty(), Empty()) => scalaz.Ordering.EQ
-        case (Empty(), Chunk(_, _)) => scalaz.Ordering.LT
-        case (Chunk(_, _), Empty()) => scalaz.Ordering.GT
-        case (Chunk(x, xs), Chunk(y, ys)) => {
-          val so = byteString.byteStringInstance.order(x, y)
-          if (so == scalaz.Ordering.EQ) order(xs, ys)
-          else so
-        }
+    def order(xs: LByteString, ys: LByteString): scalaz.Ordering = (xs, ys) match {
+      case (Empty(), Empty()) => scalaz.Ordering.EQ
+      case (Empty(), Chunk(_, _)) => scalaz.Ordering.LT
+      case (Chunk(_, _), Empty()) => scalaz.Ordering.GT
+      case (Chunk(x, xs), Chunk(y, ys)) => {
+        val so = byteString.byteStringInstance.order(x, y)
+        if (so == scalaz.Ordering.EQ) order(xs, ys)
+        else so
       }
+    }
 
-      override def equalIsNatural: Boolean = true
+    override def equalIsNatural: Boolean = true
   }
 }
 

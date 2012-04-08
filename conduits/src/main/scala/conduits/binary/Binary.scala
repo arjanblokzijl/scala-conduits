@@ -119,4 +119,14 @@ object Binary {
     }
     NeedInput(push, close)
   }
+
+  def dropWhile[F[_]](p: Byte => Boolean)(implicit M: Monad[F]): Sink[ByteString, F, Unit] = {
+    def close: Sink[ByteString, F, Unit] = pipes.pipeMonoid[ByteString, Zero, F].zero
+    def push(bs: ByteString): Sink[ByteString, F, Unit] = {
+      val bs1 = bs.dropWhile(p)
+      if (bs1.isEmpty) NeedInput(push, close)
+      else Done(Some(bs1), ())
+    }
+    NeedInput(push, close)
+  }
 }

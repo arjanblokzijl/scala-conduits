@@ -17,15 +17,22 @@ import ConduitArbitrary._
 
 class BinarySpec extends FileSpecification with ScalaCheck {
   import lbyteString._
+  val lbsi = lbyteStringInstance
+  val sbsi = byteString.byteStringInstance
+
 
   "binary head" ! check { (bs: ByteString) =>
     val res = sourceList[Id, ByteString](Stream(bs)) %%== Binary.head
     bs.headOption mustEqual(res)
   }
+  "binary isolate" ! check { (n: Int, s: Stream[Byte]) =>
+    val bstr = s.map(i => new ByteString(Array(i.toByte)))
+    val bss = sourceList[Id, ByteString](bstr) %= Binary.isolate(n) %%== consume
+    val result = byteString.concat(bss)
+    sbsi.equal(result, byteString.concat(bstr.take(n)))
+  }
 
   "binary" should {
-    val lbsi = lbyteStringInstance
-    val sbsi = byteString.byteStringInstance
     "stream a file in a Source" in {
       val bss: Stream[ByteString] = runResourceT(sourceFile[RTIO](random) %%== consume).unsafePerformIO
       val result = lbyteString.fromChunks(bss)
@@ -51,12 +58,6 @@ class BinarySpec extends FileSpecification with ScalaCheck {
       val bss = runResourceT(sourceFileRange[RTIO](tmp, Some(2), Some(4)) %%== consume).unsafePerformIO
       val result = byteString.concat(bss)
       sbsi.equal(result, byteString.fromString("2345"))
-    }
-    "binary isolate" in {
-      val s = Stream.from(1).take(10).map(i => new ByteString(Array(i.toByte)))
-      val bss = sourceList[Id, ByteString](s) %= Binary.isolate(6) %%== consume
-      val result = byteString.concat(bss)
-      sbsi.equal(result, byteString.concat(s.take(6)))
     }
   }
 }

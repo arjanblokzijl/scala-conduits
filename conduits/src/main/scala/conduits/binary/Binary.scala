@@ -82,6 +82,10 @@ object Binary {
     NeedInput(push, close)
   }
 
+  /**
+   * Ensure that the inner sink consumes maximally the given number of bytes.
+   * This does not ensure that all of those bytes are actually consumed.
+   */
   def isolate[F[_]](count: Int)(implicit M: Monad[F]): Conduit[ByteString, F, ByteString] = {
     def close(s: => Int): F[Stream[ByteString]] = M.point(Stream.Empty)
     def push(c: => Int, bs: => ByteString): F[ConduitStateResult[Int, ByteString, ByteString]] =
@@ -93,5 +97,26 @@ object Binary {
         else StateProducing(c1, Stream(a)))
       }
     conduitState(count, push, close)
+  }
+
+  /**
+   * Return all bytes while the given predicate is true.
+   */
+  def takeWhile[F[_]](p: Byte => Boolean)(implicit M: Monad[F]): Conduit[ByteString, F, ByteString] = {
+    def close: Conduit[ByteString, F, ByteString] = pipes.pipeMonoid[ByteString, ByteString, F].zero
+    def push(bs: ByteString): Conduit[ByteString, F, ByteString] = {
+      val (x, y) = bs.span(p)
+      if (bs.isEmpty) {
+        val r = NeedInput(push, close)
+        if (x.isEmpty) r
+        else HaveOutput(r, M.point(()), x)
+      }
+      else {
+        val f = Done[ByteString, ByteString, F, Unit](Some(y), ())
+        if (x.isEmpty) f
+        else HaveOutput(f, M.point(()), x)
+      }
+    }
+    NeedInput(push, close)
   }
 }

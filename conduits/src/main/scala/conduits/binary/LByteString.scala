@@ -66,6 +66,27 @@ sealed trait LByteString {
     case Empty() => None
     case Chunk(c, cs) => Some(c.head, if (c.length == 1) cs else Chunk(c.tail, cs))
   }
+
+  def takeWhile(p: Byte => Boolean): LByteString = this match {
+    case Empty() => Empty.apply
+    case Chunk(c, cs) => {
+      val bs = c.takeWhile(p)
+      if (bs.isEmpty) Empty.apply
+      else if (bs.length == c.length) Chunk(c, cs.takeWhile(p))
+      else Chunk(bs, Empty.apply)
+    }
+  }
+//-- | 'takeWhile', applied to a predicate @p@ and a ByteString @xs@,
+//-- returns the longest prefix (possibly empty) of @xs@ of elements that
+//-- satisfy @p@.
+//takeWhile :: (Word8 -> Bool) -> ByteString -> ByteString
+//takeWhile f cs0 = takeWhile' cs0
+//  where takeWhile' Empty        = Empty
+//        takeWhile' (Chunk c cs) =
+//          case findIndexOrEnd (not . f) c of
+//            0                  -> Empty
+//            n | n < S.length c -> Chunk (S.take n c) Empty
+//              | otherwise      -> Chunk c (takeWhile' cs)
 }
 
 object LByteString {

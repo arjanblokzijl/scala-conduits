@@ -14,6 +14,7 @@ import Binary._
 import Conduits._
 import org.specs2.ScalaCheck
 import ConduitArbitrary._
+import collection.immutable.Stream
 
 class BinarySpec extends FileSpecification with ScalaCheck {
   import lbyteString._
@@ -25,7 +26,14 @@ class BinarySpec extends FileSpecification with ScalaCheck {
     val res = sourceList[Id, ByteString](Stream(bs)) %%== Binary.head
     bs.headOption mustEqual(res)
   }
-  "binary isolate" ! check { (n: Int, s: Stream[Byte]) =>
+
+  "binary isolate" ! check { (bs: ByteString) =>
+    val bss = sourceList[Id, ByteString](Stream(bs)) %%== Binary.takeWhile[Id](b => b >= 10) =% consume
+    val result = lbyteString.fromChunks(bss)
+    lbsi.equal(result, lbyteString.fromChunks(Stream(bs)).takeWhile(b => b >= 10))
+  }
+
+  "binary takeWhile" ! check { (n: Int, s: Stream[Byte]) =>
     val bstr = s.map(i => new ByteString(Array(i.toByte)))
     val bss = sourceList[Id, ByteString](bstr) %= Binary.isolate(n) %%== consume
     val result = byteString.concat(bss)

@@ -46,6 +46,20 @@ sealed trait LByteString {
   }
 
   /**
+   * Takes the given number of bytes from this bytestring.
+   */
+  def take(n: Int): LByteString = this match {
+    case Empty() => Empty.apply
+    case Chunk(c, cs) =>
+      if (n <= 0) Empty.apply
+      else {
+        val bs = c.take(n)
+        if (bs.length < c.length) Chunk(bs, Empty.apply)
+        else Chunk(bs, cs take (n - bs.length))
+      }
+  }
+
+  /**
    * Gets the tail of this byteString, if it is not empty.
    */
   def tail: Option[LByteString] = this match {

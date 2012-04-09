@@ -26,4 +26,14 @@ class LByteStringSpec extends Specification with ScalaCheck {
   "tail" ! check {(s: Stream[Byte]) =>
     lbyteString.pack(s).tail.map(_.unpack) must be_==(if (s.isEmpty) None else Some(s.tail))
   }
+  "take" ! check {(s: Stream[Byte]) =>
+    lbyteString.pack(s).take(10).unpack must be_==(s.take(10))
+  }
+
+  "lazy bytestring" should {
+    "handle infinite streams" in {
+      val s = Stream.from(1).map(_.toByte)
+      lbyteString.pack(s).take(20).unpack must be_==(s.take(20))
+    }
+  }
 }

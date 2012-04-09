@@ -37,15 +37,33 @@ sealed trait LByteString {
    */
   def #::(b: => Byte): LByteString = Chunk(byteString.singleton(b), this)
 
-  def head: Byte = this match {
-    case Empty() => sys.error("head on empty LByteString")
-    case Chunk(c, cs) => c.head
+  /**
+   * Gets the head of this byteString, if it is not empty.
+   */
+  def head: Option[Byte] = this match {
+    case Empty() => None
+    case Chunk(c, cs) => Some(c.head)
   }
 
-  def tail: LByteString = this match {
-    case Empty() => sys.error("tail on empty LByteString")
-    case Chunk(c, cs) => if (c.length == 1) cs
-                         else Chunk(c.tail, cs)
+  /**
+   * Gets the tail of this byteString, if it is not empty.
+   */
+  def tail: Option[LByteString] = this match {
+    case Empty() => None
+    case Chunk(c, cs) => if (c.length == 1 && !cs.isEmpty) Some(cs)
+                         else if (c.length == 1 && c.isEmpty) None
+                         else if (c.isEmpty && !cs.isEmpty) Some(cs)
+                         else Some(Chunk(c.tail, cs))
+  }
+
+  def unpack: Stream[Byte] = this match {
+    case Empty() => Stream.Empty
+    case Chunk(c, cs) => c.toStream #::: cs.unpack
+  }
+
+  def toChunks: Stream[ByteString] = this match {
+    case Empty() => Stream.Empty
+    case Chunk(c, cs) => c #:: cs.toChunks
   }
 
   /**
@@ -55,7 +73,7 @@ sealed trait LByteString {
    * @return
    */
   def conss(b: Byte): LByteString = fold(empty = singleton(b), chunk = (sb, lb) =>
-    if (sb.length < 16) Chunk(b &: sb, lb) else Chunk(byteString.singleton(b), lb)
+    if (sb.length < 64) Chunk(b &: sb, lb) else Chunk(byteString.singleton(b), lb)
   )
 
   def append(ys: => LByteString): LByteString = fold(empty = ys, chunk = (sb, lb) =>
@@ -81,8 +99,7 @@ sealed trait LByteString {
     case Empty() => Empty.apply
     case Chunk(c, cs) => {
       val bs = c dropWhile p
-      if (bs.isEmpty)  Empty.apply
-      else if (bs.length == c.length) Chunk(bs, cs dropWhile p)
+      if (bs.isEmpty) cs.dropWhile(p)
       else Chunk(bs, cs)
     }
   }
@@ -129,18 +146,50 @@ trait LByteStringFunctions {
 
   def fromChunks(s: => Stream[ByteString]): LByteString = s match {
     case Stream.Empty => Empty.apply
-    case x #:: xs => Chunk(x, fromChunks(xs))
+    case x #:: xs => if (x.isEmpty) fromChunks(xs)
+                     else Chunk(x, fromChunks(xs))
   }
 
-  def pack(s: => Stream[Byte]): LByteString = s match {
-    case Stream.Empty => Empty.apply
-    case x #:: xs => pack(xs) conss x
+  def pack(s: => Stream[Byte]): LByteString = {
+    s match {
+      case Stream.Empty => Empty.apply
+      case _ => {
+        val (xs, xss) = s.splitAt(4)
+//        println("pack: xs is %s and xss is %s" format(xs.take(10).force, xss.take(10).force))
+        val head = new ByteString(xs.toArray)
+        if (xss isEmpty) Chunk(head, Empty.apply)
+        else Chunk(head, pack(xss))
+      }
+    }
   }
+//  -- | /O(n)/ Convert a '[Word8]' into a 'ByteString'.
+//  pack :: [Word8] -> ByteString
+//  pack ws = L.foldr (Chunk . S.pack) Empty (chunks defaultChunkSize ws)
+//    where
+//      chunks :: Int -> [a] -> [[a]]
+//      chunks _    [] = []
+//      chunks size xs = case L.splitAt size xs of
+//                        (xs', xs'') -> xs' : chunks size xs''
+//  -- | /O(n\/c)/ 'splitAt' @n xs@ is equivalent to @('take' n xs, 'drop' n xs)@.
+//  splitAt :: Int64 -> ByteString -> (ByteString, ByteString)
+//  splitAt i cs0 | i <= 0 = (Empty, cs0)
+//  splitAt i cs0 = splitAt' i cs0
+//    where splitAt' 0 cs           = (Empty, cs)
+//          splitAt' _ Empty        = (Empty, Empty)
+//          splitAt' n (Chunk c cs) =
+//            if n < fromIntegral (S.length c)
+//              then (Chunk (S.take (fromIntegral n) c) Empty
+//                   ,Chunk (S.drop (fromIntegral n) c) cs)
+//              else let (cs', cs'') = splitAt' (n - fromIntegral (S.length c)) cs
+//                     in (Chunk c cs', cs'')
 }
 
 trait LByteStringInstances {
   implicit val lbyteStringInstance: Monoid[LByteString] with Order[LByteString] with Show[LByteString] = new Monoid[LByteString] with Order[LByteString] with Show[LByteString]  {
-    def show(f: LByteString) = f.toString.toList //TODO makes no sense
+    def show(f: LByteString) = f match {
+      case Empty() => "<Empty>".toList
+      case Chunk(c, cs) => byteString.byteStringInstance.show(c) ::: show(cs)
+    }
 
     def append(f1: LByteString, f2: => LByteString) = f1 append f2
 
@@ -151,6 +200,7 @@ trait LByteStringInstances {
       case (Empty(), Chunk(_, _)) => scalaz.Ordering.LT
       case (Chunk(_, _), Empty()) => scalaz.Ordering.GT
       case (Chunk(x, xs), Chunk(y, ys)) => {
+        println("got two chunks x %s and y %s" format (x, y))
         val so = byteString.byteStringInstance.order(x, y)
         if (so == scalaz.Ordering.EQ) order(xs, ys)
         else so

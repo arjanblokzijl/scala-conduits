@@ -75,6 +75,7 @@ object SinkFunctions {
 
   def sinkIO[F[_], A, B, S](alloc: IO[S], cleanup: S => IO[Unit], push: S => A => F[SinkIOResult[A, B]], close: S => F[B])(implicit M0: MonadResource[F]): Sink[A, F, B] = {
     implicit val M = M0.MO
+
     def push1(key: => ReleaseKey)(state: => S)(input: => A): F[Sink[A, F, B]] = {
       M.bind(push(state)(input))(res => res.fold(
         done = (a, b) => M.bind(M0.release(key))(_ => M.point(Done(a, b))),
@@ -83,14 +84,15 @@ object SinkFunctions {
           PipeM(mpipe, M.bind(mpipe)(p => p.pipeClose))},
           pipeMonadTrans.liftM(close1(key)(state))))))
     }
+
     def close1(key: ReleaseKey)(state: S): F[B] = {
       M.bind(close(state))(res => M.bind(M0.release(key))(_ => M.point(res)))
     }
 
     NeedInput(input =>
-              PipeM(M.bind(M0.allocate(alloc, cleanup))(ks => push1(ks._1)(ks._2)(input))
-                , M.bind(M0.allocate(alloc, cleanup))(ks => close1(ks._1)(ks._2)))
-              , pipeMonadTrans.liftM(M0.allocate(alloc, cleanup)).flatMap((a) => pipeMonadTrans.liftM(close1(a._1)(a._2)))
-            )
+      PipeM(M.bind(M0.allocate(alloc, cleanup))(ks => push1(ks._1)(ks._2)(input))
+           , M.bind(M0.allocate(alloc, cleanup))(ks => close1(ks._1)(ks._2)))
+           , pipeMonadTrans.liftM(M0.allocate(alloc, cleanup)).flatMap((a) => pipeMonadTrans.liftM(close1(a._1)(a._2)))
+      )
   }
 }

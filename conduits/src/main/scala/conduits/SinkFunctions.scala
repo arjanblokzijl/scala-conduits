@@ -93,10 +93,4 @@ object SinkFunctions {
               , pipeMonadTrans.liftM(M0.allocate(alloc, cleanup)).flatMap((a) => pipeMonadTrans.liftM(close1(a._1)(a._2)))
             )
   }
-//TODO
-//  def transSink[F[_], G[_], A, B](f: Forall[({type λ[A] = F[A] => G[A]})#λ], sink: Sink[A, F, B])(implicit M: Monad[F], N: Monad[G]): Sink[A, G, B] = sink match {
-//    case Done(a, b) => Done(a, b)
-//    case NeedInput(push, close) => NeedInput[A, G, B](i => transSink(f, push(i)), f.apply(close))
-//    case PipeM(msink) => PipeM[A, G, B](f.apply(M.map(msink)(s => transSink(f, s))))
-//  }
 }

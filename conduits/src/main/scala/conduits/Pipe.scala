@@ -2,7 +2,7 @@ package conduits
 
 import pipes._
 import Pipe._
-import scalaz.{Monoid, MonadTrans, Monad}
+import scalaz.{Forall, Monoid, MonadTrans, Monad}
 
 /**
  * The underlying datatype for all the types in this package.  In has four
@@ -66,6 +66,16 @@ sealed trait Pipe[A, B, F[_], R] {
       , pipeM = (mp, c) => PipeM(F.map(mp)(p1 => through(p1)), F.bind(c)(r => f(r) pipeClose))
     )
     through(this)
+  }
+
+  def transPipe[G[_]](f: Forall[({type λ[A] = F[A] => G[A]})#λ])(implicit M: Monad[F], N: Monad[G]): Pipe[A, B, G, R] = {
+    def go(pipe: Pipe[A, B, F, R]): Pipe[A, B, G, R] = pipe match {
+      case Done(a, b) => Done(a, b)
+      case NeedInput(p, c) => NeedInput[A, B, G, R](i => go(p(i)), go(c))
+      case HaveOutput(p, c, o) => HaveOutput[A, B, G, R](go(p), f.apply(c), o)
+      case PipeM(mp, c) => PipeM[A, B, G, R](f.apply(M.map(mp)(p => go(p))), f.apply(c))
+    }
+    go(this)
   }
 }
 
@@ -263,7 +273,6 @@ trait PipeFunctions {
     , done = (i, r) => Done(i, r)
     , pipeM = (mp, c) => PipeM(F.map(mp)(p => sinkToPipe(p)), c)
   )
-
 }
 
 object pipes extends PipeInstances with PipeFunctions {

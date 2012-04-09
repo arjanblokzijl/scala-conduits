@@ -214,7 +214,6 @@ trait LByteStringInstances {
       case (Empty(), Chunk(_, _)) => scalaz.Ordering.LT
       case (Chunk(_, _), Empty()) => scalaz.Ordering.GT
       case (Chunk(x, xs), Chunk(y, ys)) => {
-        println("got two chunks x %s and y %s" format (x, y))
         val so = byteString.byteStringInstance.order(x, y)
         if (so == scalaz.Ordering.EQ) order(xs, ys)
         else so

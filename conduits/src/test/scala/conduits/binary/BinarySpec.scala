@@ -74,5 +74,11 @@ class BinarySpec extends FileSpecification with ScalaCheck {
       val result = byteString.concat(bss)
       sbsi.equal(result, byteString.fromString("2345"))
     }
+    "lines" in {
+      val s: String = "01234\n5678\n9"
+      val actual: Stream[ByteString] = sourceList[Id, ByteString](Stream(byteString.fromString(s))) %%== Binary.lines[Id] =% consume
+      val expected = s.lines.toStream.map(byteString.fromString)
+      actual must be_==(expected)
+    }
   }
 }

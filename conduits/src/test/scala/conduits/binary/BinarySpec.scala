@@ -47,6 +47,12 @@ class BinarySpec extends FileSpecification with ScalaCheck {
     lbsi.equal(result, lbyteString.fromChunks(Stream(bs)).dropWhile(b => b <= 10))
   }
 
+  "binary lines" ! check { (s: String) =>
+    val actual = sourceList[Id, ByteString](Stream(byteString.fromString(s))) %%== Binary.lines[Id] =% consume
+    val expected = s.lines.toStream.map(byteString.fromString)
+    actual must be_== (expected)
+  }
+
   "binary" should {
     "stream a file in a Source" in {
       val bss: Stream[ByteString] = runResourceT(sourceFile[RTIO](random) %%== consume).unsafePerformIO

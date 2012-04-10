@@ -6,14 +6,15 @@ import scalaz.effect._
 import scalaz.Kleisli._
 import scalaz.effect.IO.ioMonad
 
-case class ResourceT[F[_], A](value: Kleisli[F, IORef[ReleaseMap], A])
+case class ResourceT[F[_], A](value: Kleisli[F, IORef[ReleaseMap], A]) {
+  def flatMap[B](f: (A) => ResourceT[F, B])(implicit F: Monad[F]): ResourceT[F, B] =
+    ResourceT[F, B](kleisli(s => F.bind(value.run(s))((a: A) => f(a).value.run(s))))
 
+}
 case class ReleaseKey(key: Int)
 
 sealed trait ReleaseMap
-
 case class ReleaseMapOpen(key: Int, refCount: Int, m: Map[Int, IO[Unit]]) extends ReleaseMap
-
 case object ReleaseMapClosed extends ReleaseMap
 
 trait MonadResource[F[_]] {
@@ -59,8 +60,6 @@ trait ResourceTInstances extends ResourceTInstances0 {
 
     def liftBracket[A](init: IO[Unit], cleanup: IO[Unit], body: IO[A]): IO[A] = IOUtils.bracket_(init, cleanup, body)
   }
-
-
 
   implicit def resourceTMonadResource[F[_]](implicit F0: MonadIO[F], B0: MonadBase[IO, F]): MonadResource[({type l[a] = ResourceT[F, a]})#l] = new MonadResource[({type l[a] = ResourceT[F, a]})#l] {
     implicit def MO = resourceTMonadIO[F]
@@ -108,7 +107,7 @@ trait ResourceTFunctions {
 
   class InvalidAccess(name: String) extends RuntimeException("%s: The mutable state is being accessed after cleanup. Please contact the maintainers." format name)
 
-  def atomicModifyIORef[A, B, G[_]](ref: IORef[A])(f: (A => (A, B))): IO[B] = {
+  def atomicModifyIORef[A, B](ref: IORef[A])(f: (A => (A, B))): IO[B] = {
     ioMonad.bind(ref.read)(a0 => {
       val (a, b) = f(a0)
       ioMonad.bind(ref.write(a))(_ => ioMonad.point(b))

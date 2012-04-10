@@ -10,6 +10,9 @@ case class ResourceT[F[_], A](value: Kleisli[F, IORef[ReleaseMap], A]) {
   def flatMap[B](f: (A) => ResourceT[F, B])(implicit F: Monad[F]): ResourceT[F, B] =
     ResourceT[F, B](kleisli(s => F.bind(value.run(s))((a: A) => f(a).value.run(s))))
 
+  def map[B](f: (A) => B)(implicit F: Monad[F]): ResourceT[F, B] =
+    ResourceT[F, B](kleisli(s => F.map(value.run(s))((a: A) => f(a))))
+
 }
 case class ReleaseKey(key: Int)
 
@@ -38,8 +41,7 @@ trait ResourceTInstances0 {
 trait ResourceTInstances extends ResourceTInstances0 {
 
   implicit def resourceTMonad[F[_]](implicit F0: Monad[F]): Monad[({type l[a] = ResourceT[F, a]})#l] = new Monad[({type l[a] = ResourceT[F, a]})#l] {
-    def bind[A, B](fa: ResourceT[F, A])(f: (A) => ResourceT[F, B]): ResourceT[F, B] =
-      ResourceT[F, B](kleisli(s => F0.bind(fa.value.run(s))((a: A) => f(a).value.run(s))))
+    def bind[A, B](fa: ResourceT[F, A])(f: (A) => ResourceT[F, B]): ResourceT[F, B] = fa flatMap f
 
     def point[A](a: => A) = ResourceT[F, A](kleisli(s => F0.point(a)))
   }

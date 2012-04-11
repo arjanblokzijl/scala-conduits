@@ -110,10 +110,11 @@ trait ResourceTFunctions {
   class InvalidAccess(name: String) extends RuntimeException("%s: The mutable state is being accessed after cleanup. Please contact the maintainers." format name)
 
   def atomicModifyIORef[A, B](ref: IORef[A])(f: (A => (A, B))): IO[B] = {
-    ioMonad.bind(ref.read)(a0 => {
+    for {
+      a0 <- ref.read
       val (a, b) = f(a0)
-      ioMonad.bind(ref.write(a))(_ => ioMonad.point(b))
-    })
+      _ <- ref.write(a)
+    } yield (b)
   }
 
   def stateAlloc[F[_]](istate: IORef[ReleaseMap]): IO[Unit] =

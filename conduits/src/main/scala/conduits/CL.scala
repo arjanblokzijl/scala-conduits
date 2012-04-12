@@ -110,6 +110,18 @@ object CL {
     NeedInput(push, close)
   }
 
+  /**
+   * concatMap with an accumulator
+   */
+  def concatMapAccum[F[_], A, B, AC](accum: AC, f: (AC, A )=> (AC, Stream[B]))(implicit M: Monad[F]): Conduit[A, F, B] = {
+    def close(acc: => AC): F[Stream[B]] = M.point(Stream.Empty)
+    def push(state: => AC, input: => A): F[ConduitStateResult[AC, A, B]] = {
+      val (state1, result) = f(state, input)
+      M.point(StateProducing(state1, result))
+    }
+    conduitState(accum, push, close)
+  }
+
   def groupBy[F[_], A](f: (A, A) => Boolean)(implicit M: Monad[F]): Conduit[A, F, Stream[A]] = {
     def push(as: => Stream[A], v: => A): F[ConduitStateResult[Stream[A], A, Stream[A]]] = as match {
       case Stream.Empty => M.point(StateProducing(Stream(v), Stream.Empty))

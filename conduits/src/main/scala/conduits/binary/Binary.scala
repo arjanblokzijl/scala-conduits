@@ -11,7 +11,7 @@ import java.io.{FileOutputStream, FileInputStream, File}
 import java.nio.channels.FileChannel
 import resourcet.{ReleaseKey, MonadResource}
 import scalaz.Monad
-
+import binary.{ByteString => B}
 /**
  * User: arjan
  */
@@ -20,7 +20,7 @@ object Binary {
 
   val bufferSize = 8*1024
 
-  def sourceFile[F[_]](f: File, chunkSize: Int = ByteString.DefaultChunkSize)(implicit MR: MonadResource[F]): Source[F, ByteString] =
+  def sourceFile[F[_]](f: File, chunkSize: Int = B.DefaultChunkSize)(implicit MR: MonadResource[F]): Source[F, ByteString] =
     sourceIOStream(IO(new FileInputStream(f)))
 
   private def sourceIOStream[F[_]](alloc: IO[FileInputStream], chunkSize: Int = ByteString.DefaultChunkSize)(implicit MR: MonadResource[F]): Source[F, ByteString] =
@@ -39,8 +39,8 @@ object Binary {
       )
 
     def pullLimited(i: Int, fc: FileChannel, key: ReleaseKey): F[Source[F, ByteString]] = {
-      val c = math.min(i, ByteString.DefaultChunkSize)
-      MR.MO.bind(MR.MO.liftIO(ByteString.getContents(fc, c)))(bs => {
+      val c = math.min(i, B.DefaultChunkSize)
+      MR.MO.bind(MR.MO.liftIO(B.getContents(fc, c)))(bs => {
         val c1 = c - bs.length
         if (bs.isEmpty) M.map(MR.release(key))(_ => Done(None, ()))
         else M.point(HaveOutput(PipeM(pullLimited(c1, fc, key), MR.release(key)), MR.release(key), bs))
@@ -139,10 +139,10 @@ object Binary {
       M.point(StateProducing(leftover, ls))
     }
 
-    def close(front: => Stream[ByteString]): F[Stream[conduits.binary.ByteString]] = {
+    def close(front: => Stream[ByteString]): F[Stream[conduits.binary.ByteString]] =
       if (front.isEmpty) M.point(Stream.Empty)
       else M.point(front)
-    }
+
 
     def getLines(front: Stream[ByteString], bs: => ByteString): (Stream[ByteString], Stream[ByteString]) = {
       val (x, y) = bs.span(_ != 10.toByte)

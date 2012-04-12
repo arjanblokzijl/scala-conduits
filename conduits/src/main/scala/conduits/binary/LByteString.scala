@@ -2,15 +2,14 @@ package conduits
 package binary
 
 import LByteString._
-import java.nio.ByteBuffer
 import scalaz.effect.IO
-import scalaz.effect.IO._
+import IO._
 import java.io.{FileInputStream, File}
 import java.nio.channels.ByteChannel
-import scalaz.{Free, Show, Order, Monoid}
+import scalaz.{Show, Order, Monoid}
 
 /**
- * A minimalistic verison of a lazy ByteString.
+ * A minimalistic version of a lazy ByteString.
  */
 sealed trait LByteString {
   import LByteString._
@@ -164,8 +163,7 @@ trait LByteStringFunctions {
                      else Chunk(x, fromChunks(xs))
   }
 
-  def pack(s: => Stream[Byte], chunkSize: Int = ByteString.DefaultChunkSize): LByteString = {
-    s match {
+  def pack(s: => Stream[Byte], chunkSize: Int = ByteString.DefaultChunkSize): LByteString = s match {
       case Stream.Empty => Empty.apply
       case _ => {
         val (xs, xss) = s.splitAt(chunkSize)
@@ -174,8 +172,6 @@ trait LByteStringFunctions {
         else Chunk(head, pack(xss))
       }
     }
-  }
-
 }
 
 trait LByteStringInstances {

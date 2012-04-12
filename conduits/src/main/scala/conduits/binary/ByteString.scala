@@ -10,7 +10,7 @@ import collection.mutable.{ArrayBuilder, Builder}
 import collection.{Traversable, IndexedSeqOptimized}
 import collection.generic.CanBuildFrom
 import scalaz.std.anyVal
-import byteString._
+import ByteString._
 import java.io.{FileOutputStream, FileInputStream, File}
 import scalaz.{CharSet, Show, Order, Monoid}
 import resourcet.IOUtils._
@@ -50,7 +50,7 @@ final class ByteString(bytes: Array[Byte]) extends IndexedSeq[Byte] with Indexed
 }
 
 trait ByteStringInstances {
-  import byteString._
+  import ByteString._
   implicit val byteStringInstance: Monoid[ByteString] with Order[ByteString] with Show[ByteString] = new Monoid[ByteString] with Order[ByteString] with Show[ByteString] {
     def show(f: ByteString) = f.toString.toList
 
@@ -114,5 +114,5 @@ trait ByteStringFunctions {
 
 }
 
-object byteString extends ByteStringInstances with ByteStringFunctions
+object ByteString extends ByteStringInstances with ByteStringFunctions
 

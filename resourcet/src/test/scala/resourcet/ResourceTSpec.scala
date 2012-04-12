@@ -16,8 +16,8 @@ class ResourceTSpec extends Specification {
     "cleanup registered actions when running" in {
       val result = for {
         counter <- IO.newIORef(0)
-        val w = mr.allocate(atomicModifyIORef(counter)(i => ((i + 1), ()))
-                           , (u: Unit) => atomicModifyIORef(counter)(i => ((i + 2), ())))
+        val w = mr.allocate(modifyIORef(counter)(i => ((i + 1), ()))
+                           , (u: Unit) => modifyIORef(counter)(i => ((i + 2), ())))
 
         _ <- runResourceT(w)
         res <- counter.read

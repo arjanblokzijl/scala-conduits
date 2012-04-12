@@ -20,27 +20,27 @@ object Binary {
 
   val bufferSize = 8*1024
 
-  def sourceFile[F[_]](f: File, chunkSize: Int = byteString.DefaultChunkSize)(implicit MR: MonadResource[F]): Source[F, ByteString] =
+  def sourceFile[F[_]](f: File, chunkSize: Int = ByteString.DefaultChunkSize)(implicit MR: MonadResource[F]): Source[F, ByteString] =
     sourceIOStream(IO(new FileInputStream(f)))
 
-  private def sourceIOStream[F[_]](alloc: IO[FileInputStream], chunkSize: Int = byteString.DefaultChunkSize)(implicit MR: MonadResource[F]): Source[F, ByteString] =
+  private def sourceIOStream[F[_]](alloc: IO[FileInputStream], chunkSize: Int = ByteString.DefaultChunkSize)(implicit MR: MonadResource[F]): Source[F, ByteString] =
     sourceIO[F, ByteString, java.io.FileInputStream](alloc, s => IO(s.close()), s => {
-      MR.MO.map(MR.MO.liftIO(byteString.getContents(s.getChannel, chunkSize)))(bs =>
+      MR.MO.map(MR.MO.liftIO(ByteString.getContents(s.getChannel, chunkSize)))(bs =>
         if (bs.isEmpty) IOClosed.apply
         else IOOpen(bs))
     })
 
-  def sourceFileRange[F[_]](f: File, offset: Option[Int] = None, count: Option[Int] = None, chunkSize: Int = byteString.DefaultChunkSize)(implicit MR: MonadResource[F]): Source[F, ByteString] = {
+  def sourceFileRange[F[_]](f: File, offset: Option[Int] = None, count: Option[Int] = None, chunkSize: Int = ByteString.DefaultChunkSize)(implicit MR: MonadResource[F]): Source[F, ByteString] = {
     val M = MR.MO
     def pullUnlimited(c: FileChannel, key: ReleaseKey): F[Source[F, ByteString]] =
-      MR.MO.bind(MR.MO.liftIO(byteString.getContents(c)))(bs =>
+      MR.MO.bind(MR.MO.liftIO(ByteString.getContents(c)))(bs =>
         if (bs.isEmpty) M.map(MR.release(key))(_ => Done(None, ()))
         else M.point(HaveOutput(PipeM(pullUnlimited(c, key), MR.release(key)), MR.release(key), bs))
       )
 
     def pullLimited(i: Int, fc: FileChannel, key: ReleaseKey): F[Source[F, ByteString]] = {
-      val c = math.min(i, byteString.DefaultChunkSize)
-      MR.MO.bind(MR.MO.liftIO(byteString.getContents(fc, c)))(bs => {
+      val c = math.min(i, ByteString.DefaultChunkSize)
+      MR.MO.bind(MR.MO.liftIO(ByteString.getContents(fc, c)))(bs => {
         val c1 = c - bs.length
         if (bs.isEmpty) M.map(MR.release(key))(_ => Done(None, ()))
         else M.point(HaveOutput(PipeM(pullLimited(c1, fc, key), MR.release(key)), MR.release(key), bs))

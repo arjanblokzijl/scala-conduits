@@ -87,7 +87,7 @@ private trait ResourceTMonad[F[_]] extends Monad[({type l[a] = ResourceT[F, a]})
 
 
 trait ResourceTFunctions {
-  def register(istate: IORef[ReleaseMap], rel: IO[Unit]): IO[ReleaseKey] = atomicModifyIORef(istate)((rm: ReleaseMap) => rm match {
+  def register(istate: IORef[ReleaseMap], rel: IO[Unit]): IO[ReleaseKey] = modifyIORef(istate)((rm: ReleaseMap) => rm match {
     case ReleaseMapOpen(key, rf, m) => (ReleaseMapOpen(key + 1, rf, m.updated(key, rel)), ReleaseKey(key))
     case ReleaseMapClosed => throw new InvalidAccess("register")
   })
@@ -99,7 +99,7 @@ trait ResourceTFunctions {
       case ReleaseMapClosed => throw new InvalidAccess("release")
     }
     IOUtils.mask[Unit, Unit](restore => {
-      val maction: IO[Option[IO[Unit]]] = atomicModifyIORef(istate)(lookupAction)
+      val maction: IO[Option[IO[Unit]]] = modifyIORef(istate)(lookupAction)
       ioMonad.bind(maction)(mf => mf.map(a => restore(a)).getOrElse(ioMonad.point(())))
     })
   }
@@ -109,7 +109,7 @@ trait ResourceTFunctions {
 
   class InvalidAccess(name: String) extends RuntimeException("%s: The mutable state is being accessed after cleanup. Please contact the maintainers." format name)
 
-  def atomicModifyIORef[A, B](ref: IORef[A])(f: (A => (A, B))): IO[B] = {
+  def modifyIORef[A, B](ref: IORef[A])(f: (A => (A, B))): IO[B] = {
     for {
       a0 <- ref.read
       val (a, b) = f(a0)
@@ -118,13 +118,13 @@ trait ResourceTFunctions {
   }
 
   def stateAlloc[F[_]](istate: IORef[ReleaseMap]): IO[Unit] =
-    atomicModifyIORef(istate)((rm: ReleaseMap) => rm match {
+    modifyIORef(istate)((rm: ReleaseMap) => rm match {
       case ReleaseMapOpen(nk, rf, m) => (ReleaseMapOpen(nk, rf + 1, m), ())
       case ReleaseMapClosed => throw new InvalidAccess("stateAlloc")
     })
 
   def stateCleanup[F[_], A](istate: IORef[ReleaseMap]): IO[Unit] = {
-    val io: IO[Option[Map[Int, IO[Unit]]]] = atomicModifyIORef(istate)((rm: ReleaseMap) => rm match {
+    val io: IO[Option[Map[Int, IO[Unit]]]] = modifyIORef(istate)((rm: ReleaseMap) => rm match {
       case ReleaseMapOpen(nk, rf, m) => {
         val rf1 = rf - 1
         if (rf1 == Int.MinValue) (ReleaseMapClosed, Some(m))

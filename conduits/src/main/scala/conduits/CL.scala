@@ -160,4 +160,11 @@ object CL {
       }
     conduitState(count, push, close)
   }
+
+  /**
+   * Ignore the remainder of values in the source. Particularly useful when
+   * combined with 'isolate'.
+   */
+  def sinkNull[F[_], A](implicit M: Monad[F]): Sink[A, F, Unit] =
+    NeedInput(_ => sinkNull, pipeMonad[A, Zero, F].point(()))
 }

@@ -86,10 +86,18 @@ class ConduitSpec extends Specification with ScalaCheck {
       val s = Stream(1, 1, 1, 2, 2, 2, 2, 3, 3, 4, 5)
       ((CL.groupBy[Id, Int]((a, b) => a == b) %= sourceList(s)) %%== consume) must be_===(Stream(Stream(1, 1, 1), Stream(2, 2, 2, 2), Stream(3, 3), Stream(4), Stream(5)))
     }
-    "isolate" in {
+  }
+
+  "isolate" should {
+    "consume no more than the given number of values" in {
       val s = Stream.from(0)
       val res = (sourceList[Id, Int](s) %= isolate(10) %%== consume)
       res must be_===(s.take(10))
+    }
+    "consume all data combined with sinkNull" in {
+      val s = Stream.from(0).take(20)
+      val res = (sourceList[Id, Int](s) %%== (isolate[Id, Int](10) =% sinkNull) flatMap(_ => consume))
+      res must be_===(Stream.from(10).take(10))
     }
   }
 

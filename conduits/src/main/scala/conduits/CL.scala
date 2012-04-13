@@ -167,4 +167,22 @@ object CL {
    */
   def sinkNull[F[_], A](implicit M: Monad[F]): Sink[A, F, Unit] =
     NeedInput(_ => sinkNull, pipeMonad[A, Zero, F].point(()))
+
+  def zipSinks[F[_], A, B, C](f1: Sink[A, F, B], f2: Sink[A, F, C])(implicit M: Monad[F]): Sink[A, F, (B, C)] =
+    zipSinks1(scalaz.Ordering.EQ)(f1, f2)
+
+  def zipSinks1[F[_], A, B, C](by: scalaz.Ordering)(f1: Sink[A, F, B], f2: Sink[A, F, C])(implicit M: Monad[F]): Sink[A, F, (B, C)] = (f1, f2) match {
+    case (PipeM(mpx, mx), py) => PipeM(M.map(mpx)(x => zipSinks1(by)(x, py)), M.map2(mx, py.pipeClose)((x, y) => (x, y)))
+    case (px, PipeM(mpy, my)) => PipeM(M.map(mpy)(y => zipSinks1(by)(px, y)), M.map2(px.pipeClose, my)((x, y) => (x, y)))
+    case (Done(ix, x), Done(iy, y)) => by match {
+      case scalaz.Ordering.EQ => Done(iy.flatMap(_ => iy), (x, y))
+      case scalaz.Ordering.GT => Done(ix, (x, y))
+      case scalaz.Ordering.LT => Done(iy, (x, y))
+    }
+    case (NeedInput(fpx, px), NeedInput(fpy, py)) => NeedInput(i => zipSinks1(scalaz.Ordering.EQ)(fpx(i), fpy(i)), zipSinks1(scalaz.Ordering.EQ)(px, py))
+    case (NeedInput(fpx, px), py) => NeedInput(i => zipSinks1(scalaz.Ordering.GT)(fpx(i), py), zipSinks1(scalaz.Ordering.EQ)(px, py))
+    case (px, NeedInput(fpy, py)) => NeedInput(i => zipSinks1(scalaz.Ordering.LT)(px, fpy(i)), zipSinks1(scalaz.Ordering.EQ)(px, py))
+    case (HaveOutput(_, _, o), _) => sys.error("absurd: Sink does not have output")//TODO define absurd for Zero
+    case (_, HaveOutput(_, _, o)) => sys.error("absurd: Sink does not have output")
+  }
 }

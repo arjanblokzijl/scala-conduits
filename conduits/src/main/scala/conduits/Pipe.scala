@@ -292,6 +292,10 @@ object pipes extends PipeInstances with PipeFunctions {
    */
   sealed trait Zero
 
+  object Zero extends Zero
+
+//  def absurd[A](z: Zero): A = Zero
+
   /**
    * A Pipe that produces a stream of output values, without consuming any input.
    * A Source does not produce a final result, thus the result parameter is [[scala.Unit]].

@@ -165,8 +165,18 @@ class ConduitSpec extends Specification with ScalaCheck {
   "zipping sinks" should {
     "take all" in {
       val s = Stream.from(0).take(10)
-      val res = (sourceList[Id, Int](s) %%== zipSinks[Id, Int, Stream[Int], Stream[Int]](consume, consume))
+      val res = (sourceList[Id, Int](s) %%== zipSinks(consume[Id, Int], consume[Id, Int]))
       res must be_==(s, s)
+    }
+    "take fewer on left" in {
+      val s = Stream.from(0).take(10)
+      val res = (sourceList[Id, Int](s) %%== zipSinks(take[Id, Int](4), consume[Id, Int]))
+      res must be_==(s.take(4), s)
+    }
+    "take fewer on right" in {
+      val s = Stream.from(0).take(10)
+      val res = (sourceList[Id, Int](s) %%== zipSinks(consume[Id, Int], take[Id, Int](4)))
+      res must be_==(s, s.take(4))
     }
   }
 }

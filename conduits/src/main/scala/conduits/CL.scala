@@ -182,7 +182,7 @@ object CL {
     case (NeedInput(fpx, px), NeedInput(fpy, py)) => NeedInput(i => zipSinks1(scalaz.Ordering.EQ)(fpx(i), fpy(i)), zipSinks1(scalaz.Ordering.EQ)(px, py))
     case (NeedInput(fpx, px), py) => NeedInput(i => zipSinks1(scalaz.Ordering.GT)(fpx(i), py), zipSinks1(scalaz.Ordering.EQ)(px, py))
     case (px, NeedInput(fpy, py)) => NeedInput(i => zipSinks1(scalaz.Ordering.LT)(px, fpy(i)), zipSinks1(scalaz.Ordering.EQ)(px, py))
-    case (HaveOutput(_, _, o), _) => sys.error("absurd: Sink does not have output")//TODO define absurd for Zero
-    case (_, HaveOutput(_, _, o)) => sys.error("absurd: Sink does not have output")
+    case (HaveOutput(_, _, o), _) => absurd(o)
+    case (_, HaveOutput(_, _, o)) => absurd(o)
   }
 }

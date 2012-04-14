@@ -292,9 +292,10 @@ object pipes extends PipeInstances with PipeFunctions {
    */
   sealed trait Zero
 
-  object Zero extends Zero
-
-//  def absurd[A](z: Zero): A = Zero
+  /**
+   * 'ex contradictione sequitur quodlibet'
+   */
+  def absurd[A](z: Zero): A = absurd(z)
 
   /**
    * A Pipe that produces a stream of output values, without consuming any input.

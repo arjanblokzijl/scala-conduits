@@ -11,6 +11,7 @@ import scalaz.effect.IO
 import scalaz.effect.IO._
 import java.io.{FileInputStream, File}
 import java.nio.channels.ByteChannel
+import java.nio.CharBuffer
 
 /**
  *  A strict Text instance, which stores [[scala.Char]]'s in an Array.
@@ -23,6 +24,8 @@ final class Text(chars: Array[Char]) extends IndexedSeq[Char] with IndexedSeqOpt
   def length = arr.length
 
   def toArray: Array[Char] = arr
+
+  def toCharBuffer: CharBuffer = CharBuffer.wrap(arr).asReadOnlyBuffer
 
   def append(that: => Text): Text = new Text(arr ++ that.toArray)
 
@@ -61,6 +64,13 @@ trait TextFunctions {
     bytes.rewind()
     val ar = new Array[Char](size)
     bytes.asCharBuffer.get(ar)
+    new Text(ar)
+  }
+
+  def fromCharBuffer(chars: java.nio.CharBuffer, size: Int = DefaultChunkSize): Text = {
+    chars.rewind()
+    val ar = new Array[Char](size)
+    chars.get(ar)
     new Text(ar)
   }
 

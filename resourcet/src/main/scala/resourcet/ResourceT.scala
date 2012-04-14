@@ -28,7 +28,26 @@ trait MonadResource[F[_]] {
   def register(a: => IO[Unit]): F[ReleaseKey]
 
   def release(rk: ReleaseKey): F[Unit]
+
+  //TODO
+//  def resourceMask[F[_], B](f: Forall[({type λ[A] = ResourceT[IO, A] => ResourceT[IO, A]})#λ] => ResourceT[IO, B]): F[B]
 }
+
+trait MonadThrow[F[_]] {
+  implicit def M: Monad[F]
+
+  def monadThrow[A](e: Throwable): F[A]
+}
+
+trait MonadThrowInstances {
+  implicit def monadThrowIO(implicit F0: Monad[IO]): MonadThrow[IO] = new MonadThrow[IO] {
+    implicit def M = F0
+
+    def monadThrow[A](e: Throwable) = IO.throwIO[A](e)
+  }
+}
+
+object MonadThrow extends MonadThrowInstances
 
 trait ResourceTInstances0 {
   implicit def resourceTMonadIO[F[_]](implicit M0: MonadIO[F], M1: Monad[F]): MonadIO[({type l[a] = ResourceT[F, a]})#l] = new MonadIO[({type l[a] = ResourceT[F, a]})#l] with ResourceTMonad[F] {
@@ -73,6 +92,10 @@ trait ResourceTInstances extends ResourceTInstances0 {
     def allocate[A](acquire: IO[A], rel: (A) => IO[Unit]) = ResourceT(kleisli(istate =>
       F0.liftIO(IOUtils.mask[A, (ReleaseKey, A)](restore =>
         ioMonad.bind(restore(acquire))(a => ioMonad.map(resource.register(istate, rel(a)))(key => (key, a)))))))
+
+//    def resourceMask[F[_], B](f: Forall[({type λ[A] = ResourceT[IO, A] => ResourceT[IO, A]})#λ] => ResourceT[IO, B]): F[B] = {
+//
+//    }
   }
 }
 

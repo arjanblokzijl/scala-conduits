@@ -290,7 +290,7 @@ object pipes extends PipeInstances with PipeFunctions {
   /**
    * The uninhabited type.
    */
-  sealed trait Zero
+  case class Zero(z: Zero)
 
   /**
    * 'ex contradictione sequitur quodlibet'

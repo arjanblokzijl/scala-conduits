@@ -90,7 +90,7 @@ trait ByteStringFunctions {
 
   def fromString(s: String): ByteString = new ByteString(s.getBytes(CharSet.UTF8))
 
-//  def pack(bs: Stream[Byte]): ByteString = new ByteString(s.getBytes(CharSet.UTF8))
+  def fromSeq(s: Seq[Byte]): ByteString = new ByteString(s.toArray)
 
   def cons(b: Byte, bs: ByteString): ByteString = new ByteString(b +: bs.toArray)
 

@@ -13,8 +13,7 @@ import collection.IndexedSeqOptimized
 /**
  * A minimalistic version of a lazy ByteString.
  */
-sealed trait LByteString extends IndexedSeq[Byte] with IndexedSeqOptimized[Byte, LByteString] {
-  override protected[this] def newBuilder: Builder[Byte, LByteString] = new LByteStringBuilder
+sealed trait LByteString {
   import LByteString._
   def fold[Z](empty: => Z, chunk: (=> ByteString, => LByteString) => Z): Z
 
@@ -28,7 +27,7 @@ sealed trait LByteString extends IndexedSeq[Byte] with IndexedSeqOptimized[Byte,
     go(this, z, f).run
   }
 
-  override def isEmpty: Boolean = this match {
+  def isEmpty: Boolean = this match {
     case Empty() => true
     case _ => false
   }
@@ -42,7 +41,7 @@ sealed trait LByteString extends IndexedSeq[Byte] with IndexedSeqOptimized[Byte,
   /**
    * Takes the given number of bytes from this bytestring.
    */
-  override def take(n: Int): LByteString = this match {
+  def take(n: Int): LByteString = this match {
     case Empty() => Empty.apply
     case Chunk(c, cs) =>
       if (n <= 0) Empty.apply
@@ -51,6 +50,14 @@ sealed trait LByteString extends IndexedSeq[Byte] with IndexedSeqOptimized[Byte,
         if (bs.length < c.length) Chunk(bs, Empty.apply)
         else Chunk(bs, cs take (n - bs.length))
       }
+  }
+
+  /**
+   * Gets the head of this byteString, if it is not empty.
+   */
+  def head: Option[Byte] = this match {
+    case Empty() => None
+    case Chunk(c, cs) => Some(c.head)
   }
 
   /**
@@ -93,7 +100,7 @@ sealed trait LByteString extends IndexedSeq[Byte] with IndexedSeqOptimized[Byte,
     case Chunk(c, cs) => Some(c.head, if (c.length == 1) cs else Chunk(c.tail, cs))
   }
 
-  override def takeWhile(p: Byte => Boolean): LByteString = this match {
+  def takeWhile(p: Byte => Boolean): LByteString = this match {
     case Empty() => Empty.apply
     case Chunk(c, cs) => {
       val bs = c takeWhile p
@@ -103,7 +110,7 @@ sealed trait LByteString extends IndexedSeq[Byte] with IndexedSeqOptimized[Byte,
     }
   }
 
-  override def dropWhile(p: Byte => Boolean): LByteString = this match {
+  def dropWhile(p: Byte => Boolean): LByteString = this match {
     case Empty() => Empty.apply
     case Chunk(c, cs) => {
       val bs = c dropWhile p
@@ -122,6 +129,11 @@ sealed trait LByteString extends IndexedSeq[Byte] with IndexedSeqOptimized[Byte,
   def length: Int = this match {
     case Empty() => 0
     case Chunk(c, cs) => c.length + cs.length
+  }
+
+  def map(f: Byte => Byte): LByteString = this match {
+    case Empty() => Empty.apply
+    case Chunk(c, cs) => Chunk(ByteString.fromSeq(c map f), cs map f)
   }
 }
 
@@ -207,6 +219,6 @@ trait LByteStringInstances {
   }
 }
 
-final class LByteStringBuilder extends scala.collection.mutable.LazyBuilder[Byte, LByteString] {
-  def result() = pack(parts.toStream.flatMap(_ toStream))
-}
+//final class LByteStringBuilder extends scala.collection.mutable.LazyBuilder[Byte, LByteString] {
+//  def result() = pack(parts.toStream.flatMap(_ toStream))
+//}

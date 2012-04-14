@@ -1,5 +1,6 @@
 package conduits
 
+import empty.Void
 import org.specs2.mutable.Specification
 import scalaz._
 import std.list._
@@ -67,6 +68,11 @@ class ConduitSpec extends Specification with ScalaCheck {
     (sourceList[Id, Int](stream) %= sequence(consume) %%== consume).flatten must be_==(stream)
   }
 
+  "zipping sink take all" ! check {
+    (s: Stream[Int]) =>
+      (sourceList[Id, Int](s) %%== zipSinks(consume[Id, Int], consume[Id, Int])) must be_==(s, s)
+  }
+
   "conduits" should {
     "head removes the first element from the inputstream" in {
       val s = Stream.from(0).take(5)
@@ -108,7 +114,7 @@ class ConduitSpec extends Specification with ScalaCheck {
       val s = Stream.from(1).take(11)
       val sumSink: Sink[Int, Id, Int] = head[Id, Int] flatMap(ma => ma match {
         case Some(i) => head[Id, Int].map(mi => i + mi.getOrElse(0))
-        case None => pipeMonad[Int, Zero, Id].point(0)
+        case None => pipeMonad[Int, Void, Id].point(0)
       })
 
       val res = (sourceList[Id, Int](s) %= sequence(sumSink) %%== consume)
@@ -121,7 +127,7 @@ class ConduitSpec extends Specification with ScalaCheck {
       val s = Stream.from(1).take(11)
       val sumSink: Sink[Int, Id, Int] = head[Id, Int] flatMap(ma => ma match {
         case Some(i) => peek[Id, Int].map(mi => i + mi.getOrElse(0))
-        case None => pipeMonad[Int, Zero, Id].point(0)
+        case None => pipeMonad[Int, Void, Id].point(0)
       })
 
       val res = (sourceList[Id, Int](s) %= sequence(sumSink) %%== consume)
@@ -163,11 +169,6 @@ class ConduitSpec extends Specification with ScalaCheck {
   }
 
   "zipping sinks" should {
-    "take all" in {
-      val s = Stream.from(0).take(10)
-      val res = (sourceList[Id, Int](s) %%== zipSinks(consume[Id, Int], consume[Id, Int]))
-      res must be_==(s, s)
-    }
     "take fewer on left" in {
       val s = Stream.from(0).take(10)
       val res = (sourceList[Id, Int](s) %%== zipSinks(take[Id, Int](4), consume[Id, Int]))

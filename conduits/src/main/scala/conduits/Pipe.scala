@@ -1,5 +1,6 @@
 package conduits
 
+import empty.Void
 import pipes._
 import Pipe._
 import scalaz.{Forall, Monoid, MonadTrans, Monad}
@@ -243,7 +244,7 @@ trait PipeFunctions {
   /**
    * Run a complete pipeline until processing completes.
    */
-  def runPipe[F[_], R](p: => Pipe[Zero, Zero, F, R])(implicit F: Monad[F]): F[R] = p.fold(
+  def runPipe[F[_], R](p: => Pipe[Void, Void, F, R])(implicit F: Monad[F]): F[R] = p.fold(
     haveOutput = (_, c, _) => c
     , needInput = (_, c) => runPipe(c)
     , done = (_, r) => F.point(r)
@@ -288,26 +289,16 @@ trait PipeFunctions {
 object pipes extends PipeInstances with PipeFunctions {
 
   /**
-   * The uninhabited type.
-   */
-  case class Zero(z: Zero)
-
-  /**
-   * 'ex contradictione sequitur quodlibet'
-   */
-  def absurd[A](z: Zero): A = absurd(z)
-
-  /**
    * A Pipe that produces a stream of output values, without consuming any input.
    * A Source does not produce a final result, thus the result parameter is [[scala.Unit]].
    */
-   type Source[F[_], A] = Pipe[Zero, A, F, Unit]
+   type Source[F[_], A] = Pipe[Void, A, F, Unit]
 
   /**
    * A Pipe that consumes a stream of input values and produces a final result.
    * It cannot produce any output values, and thus the output parameter is [[conduits.pipes.Zero]]
    */
-   type Sink[A, F[_], R] = Pipe[A, Zero, F, R]
+   type Sink[A, F[_], R] = Pipe[A, Void, F, R]
 
   /**
    * A Pipe that consumes a stream of input values and produces a stream

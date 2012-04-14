@@ -1,5 +1,6 @@
 package conduits
 
+import empty.Void
 import resourcet.resource
 import scalaz.std.stream._
 import scalaz._
@@ -32,24 +33,24 @@ object CL {
 
   /**Take a single value from the stream, if available.*/
   def head[F[_], A](implicit M: Monad[F]): Sink[A, F, Option[A]] =
-    NeedInput(a =>  Done(None, Some(a)), pipeMonad[A, Zero, F].point[Option[A]](None))
+    NeedInput(a =>  Done(None, Some(a)), pipeMonad[A, Void, F].point[Option[A]](None))
 
   /**Look at the next value of the stream, if available. This does not alter the content of the stream*/
   def peek[F[_], A](implicit M: Monad[F]): Sink[A, F, Option[A]] =
-    NeedInput(a => Done(Some(a), Some(a)), pipeMonad[A, Zero, F].point[Option[A]](None))
+    NeedInput(a => Done(Some(a), Some(a)), pipeMonad[A, Void, F].point[Option[A]](None))
 
   /**
    * Takes a number of values from the data stream and returns a the elements as a [[scala.collection.immutable.Stream]].
    */
   def take[F[_], A](n: Int)(implicit M: Monad[F]): Sink[A, F, Stream[A]] = {
     def app[A](l1: Stream[A], l2: => Stream[A]): Stream[A] = streamInstance.plus(l1, l2)
-    def go(count: Int, acc: Stream[A]) = NeedInput(push(count, acc), pipeMonad[A, Zero, F].point(acc))
+    def go(count: Int, acc: Stream[A]) = NeedInput(push(count, acc), pipeMonad[A, Void, F].point(acc))
     def push(count: Int, acc: Stream[A])(x: A): Sink[A, F, Stream[A]] = {
        if (count <= 0) Done(Some(x), acc)
        else {
          val count1 = count - 1
          if (count1 <= 0) Done(None, app(acc, Stream(x)))
-         else NeedInput(push(count1, app(acc, Stream(x))), pipeMonad[A, Zero, F].point(app(acc, Stream(x))))
+         else NeedInput(push(count1, app(acc, Stream(x))), pipeMonad[A, Void, F].point(app(acc, Stream(x))))
        }
     }
     go(n, Stream.empty[A])
@@ -61,13 +62,13 @@ object CL {
       case n => drop(n)
     }
     count match {
-      case n if (n <= 0) => NeedInput(i => Done(Some(i), ()), pipeMonad[A, Zero, F].point(()))
-      case c => NeedInput(push, NeedInput(push, pipeMonad[A, Zero, F].point(())))
+      case n if (n <= 0) => NeedInput(i => Done(Some(i), ()), pipeMonad[A, Void, F].point(()))
+      case c => NeedInput(push, NeedInput(push, pipeMonad[A, Void, F].point(())))
     }
   }
 
   def consume[F[_], A](implicit M: Monad[F]): Sink[A, F, Stream[A]] = {
-    def go(acc: Stream[A]): Sink[A, F, Stream[A]] = NeedInput(push(acc), pipeMonad[A, Zero, F].point(acc))
+    def go(acc: Stream[A]): Sink[A, F, Stream[A]] = NeedInput(push(acc), pipeMonad[A, Void, F].point(acc))
     def push(acc: Stream[A])(x: A): Sink[A, F, Stream[A]] = go(streamInstance.plus(acc, Stream(x)))
     go(Stream.empty[A])
   }
@@ -166,11 +167,12 @@ object CL {
    * combined with 'isolate'.
    */
   def sinkNull[F[_], A](implicit M: Monad[F]): Sink[A, F, Unit] =
-    NeedInput(_ => sinkNull, pipeMonad[A, Zero, F].point(()))
+    NeedInput(_ => sinkNull, pipeMonad[A, Void, F].point(()))
 
   def zipSinks[F[_], A, B, C](f1: Sink[A, F, B], f2: Sink[A, F, C])(implicit M: Monad[F]): Sink[A, F, (B, C)] =
     zipSinks1(scalaz.Ordering.EQ)(f1, f2)
 
+  import Void._
   def zipSinks1[F[_], A, B, C](by: scalaz.Ordering)(f1: Sink[A, F, B], f2: Sink[A, F, C])(implicit M: Monad[F]): Sink[A, F, (B, C)] = (f1, f2) match {
     case (PipeM(mpx, mx), py) => PipeM(M.map(mpx)(x => zipSinks1(by)(x, py)), M.map2(mx, py.pipeClose)((x, y) => (x, y)))
     case (px, PipeM(mpy, my)) => PipeM(M.map(mpy)(y => zipSinks1(by)(px, y)), M.map2(px.pipeClose, my)((x, y) => (x, y)))

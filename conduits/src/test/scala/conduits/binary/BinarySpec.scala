@@ -7,7 +7,7 @@ import std.anyVal._
 import resourcet._
 import resource._
 
-
+import empty.Void
 import CL._
 import Binary._
 
@@ -15,7 +15,7 @@ import Conduits._
 import org.specs2.ScalaCheck
 import ConduitArbitrary._
 import collection.immutable.Stream
-import conduits.pipes.Zero
+
 
 class BinarySpec extends FileSpecification with ScalaCheck {
   import LByteString._

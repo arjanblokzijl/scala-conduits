@@ -1,5 +1,6 @@
 package conduits
 
+import empty.Void
 import scalaz.effect.IO
 import resourcet.{ReleaseKey, MonadResource, resource}
 import scalaz.{Forall, Monad}
@@ -65,12 +66,12 @@ object SinkFunctions {
     def push1(state1: S)(input: I): Sink[I, F, A] = PipeM(
       M.bind(push(state1)(input))((res: SinkStateResult[S, I, A]) =>
          res.fold(done = (i, a) => M.point(Done(i, a)),
-         processing = s => M.point(NeedInput[I, Zero, F, A](push1(s), close1(s)))))
+         processing = s => M.point(NeedInput[I, Void, F, A](push1(s), close1(s)))))
       , close(state)
       )
 
-    def close1(s: S): Pipe[I, Zero, F, A] = pipeMonadTrans.liftM(close(s))
-    NeedInput[I, Zero, F, A](push1(state), close1(state))
+    def close1(s: S): Pipe[I, Void, F, A] = pipeMonadTrans.liftM(close(s))
+    NeedInput[I, Void, F, A](push1(state), close1(state))
   }
 
   def sinkIO[F[_], A, B, S](alloc: IO[S], cleanup: S => IO[Unit], push: S => A => F[SinkIOResult[A, B]], close: S => F[B])(implicit M0: MonadResource[F]): Sink[A, F, B] = {

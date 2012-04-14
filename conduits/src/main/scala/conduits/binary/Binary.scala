@@ -12,6 +12,8 @@ import java.nio.channels.FileChannel
 import resourcet.{ReleaseKey, MonadResource}
 import scalaz.Monad
 import binary.{ByteString => B}
+import empty.Void
+
 /**
  * User: arjan
  */
@@ -78,7 +80,7 @@ object Binary {
       case None => NeedInput(push, close)
       case Some((b, bs1)) => Done(if (bs1.isEmpty) None else Some(bs1), Some(b))
     }
-    def close: Sink[ByteString, F, Option[Byte]] = pipeMonad[ByteString, Zero, F].point(None)
+    def close: Sink[ByteString, F, Option[Byte]] = pipeMonad[ByteString, Void, F].point(None)
     NeedInput(push, close)
   }
 
@@ -121,7 +123,7 @@ object Binary {
   }
 
   def dropWhile[F[_]](p: Byte => Boolean)(implicit M: Monad[F]): Sink[ByteString, F, Unit] = {
-    def close: Sink[ByteString, F, Unit] = pipes.pipeMonoid[ByteString, Zero, F].zero
+    def close: Sink[ByteString, F, Unit] = pipes.pipeMonoid[ByteString, Void, F].zero
     def push(bs: ByteString): Sink[ByteString, F, Unit] = {
       val bs1 = bs.dropWhile(p)
       if (bs1.isEmpty) NeedInput(push, close)

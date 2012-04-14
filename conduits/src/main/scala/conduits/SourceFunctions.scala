@@ -1,5 +1,6 @@
 package conduits
 
+import empty.Void
 import scalaz.{Forall, Monad}
 import scalaz.effect.IO
 import resourcet.{ReleaseKey, MonadResource}
@@ -60,9 +61,9 @@ object SourceFunctions {
   def sourceState[S, F[_], A](state: => S, pull: (S => F[SourceStateResult[S, A]]))(implicit M: Monad[F]): Source[F, A] = {
     def pull1(state: => S): F[Source[F, A]] =
       M.bind(pull(state))(res => res.fold(open = (s, o) => M.point(HaveOutput(src(s), close, o)),
-                                          closed = M.point(Done[Zero, A, F, Unit](None, ()))))
+                                          closed = M.point(Done[Void, A, F, Unit](None, ()))))
     def close = M.point(())
-    def src(state1: => S): Pipe[Zero, A, F, Unit] = PipeM(pull1(state1), close)
+    def src(state1: => S): Pipe[Void, A, F, Unit] = PipeM(pull1(state1), close)
     src(state)
   }
 

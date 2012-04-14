@@ -21,10 +21,10 @@ class LByteStringSpec extends Specification with ScalaCheck {
     LByteString.pack(s).dropWhile(_ < 50).unpack must be_==(expected)
   }
   "head" ! check {(s: Stream[Byte]) =>
-    LByteString.pack(s).head must be_==(s.headOption)
+    LByteString.pack(s).headOption must be_==(s.headOption)
   }
   "tail" ! check {(s: Stream[Byte]) =>
-    LByteString.pack(s).tail.map(_.unpack) must be_==(if (s.isEmpty) None else Some(s.tail))
+    LByteString.pack(s).tailOption.map(_.unpack) must be_==(if (s.isEmpty) None else Some(s.tail))
   }
   "take" ! check {(s: Stream[Byte]) =>
     LByteString.pack(s).take(10).unpack must be_==(s.take(10))

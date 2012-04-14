@@ -7,11 +7,14 @@ import IO._
 import java.io.{FileInputStream, File}
 import java.nio.channels.ByteChannel
 import scalaz.{Show, Order, Monoid}
+import collection.mutable.Builder
+import collection.IndexedSeqOptimized
 
 /**
  * A minimalistic version of a lazy ByteString.
  */
-sealed trait LByteString {
+sealed trait LByteString extends IndexedSeq[Byte] with IndexedSeqOptimized[Byte, LByteString] {
+  override protected[this] def newBuilder: Builder[Byte, LByteString] = new LByteStringBuilder
   import LByteString._
   def fold[Z](empty: => Z, chunk: (=> ByteString, => LByteString) => Z): Z
 
@@ -25,7 +28,7 @@ sealed trait LByteString {
     go(this, z, f).run
   }
 
-  def isEmpty: Boolean = this match {
+  override def isEmpty: Boolean = this match {
     case Empty() => true
     case _ => false
   }
@@ -37,17 +40,9 @@ sealed trait LByteString {
   def #::(b: => Byte): LByteString = Chunk(ByteString.singleton(b), this)
 
   /**
-   * Gets the head of this byteString, if it is not empty.
-   */
-  def head: Option[Byte] = this match {
-    case Empty() => None
-    case Chunk(c, cs) => Some(c.head)
-  }
-
-  /**
    * Takes the given number of bytes from this bytestring.
    */
-  def take(n: Int): LByteString = this match {
+  override def take(n: Int): LByteString = this match {
     case Empty() => Empty.apply
     case Chunk(c, cs) =>
       if (n <= 0) Empty.apply
@@ -61,7 +56,7 @@ sealed trait LByteString {
   /**
    * Gets the tail of this byteString, if it is not empty.
    */
-  def tail: Option[LByteString] = this match {
+  def tailOption: Option[LByteString] = this match {
     case Empty() => None
     case Chunk(c, cs) => if (c.length == 1 && !cs.isEmpty) Some(cs)
                          else if (c.length == 1 && c.isEmpty) None
@@ -98,7 +93,7 @@ sealed trait LByteString {
     case Chunk(c, cs) => Some(c.head, if (c.length == 1) cs else Chunk(c.tail, cs))
   }
 
-  def takeWhile(p: Byte => Boolean): LByteString = this match {
+  override def takeWhile(p: Byte => Boolean): LByteString = this match {
     case Empty() => Empty.apply
     case Chunk(c, cs) => {
       val bs = c takeWhile p
@@ -108,13 +103,25 @@ sealed trait LByteString {
     }
   }
 
-  def dropWhile(p: Byte => Boolean): LByteString = this match {
+  override def dropWhile(p: Byte => Boolean): LByteString = this match {
     case Empty() => Empty.apply
     case Chunk(c, cs) => {
       val bs = c dropWhile p
       if (bs.isEmpty) cs.dropWhile(p)
       else Chunk(bs, cs)
     }
+  }
+
+  def apply(idx: Int): Byte = this match {
+    case Empty() => sys.error("apply on empty LByteString")
+    case Chunk(c, cs) =>
+      if (c.size > idx) c.apply(idx)
+      else cs.apply(idx)
+  }
+
+  def length: Int = this match {
+    case Empty() => 0
+    case Chunk(c, cs) => c.length + cs.length
   }
 }
 
@@ -200,3 +207,6 @@ trait LByteStringInstances {
   }
 }
 
+final class LByteStringBuilder extends scala.collection.mutable.LazyBuilder[Byte, LByteString] {
+  def result() = pack(parts.toStream.flatMap(_ toStream))
+}

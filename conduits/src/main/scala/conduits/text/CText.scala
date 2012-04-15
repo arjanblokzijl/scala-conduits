@@ -27,7 +27,7 @@ object CText {
   def decode[F[_]](codec: Codec)(implicit MT: MonadThrow[F]): Conduit[ByteString, F, Text] = {
     implicit val M = MT.M
     def push(bs: ByteString): Conduit[ByteString, F, Text] =
-      HaveOutput(NeedInput(push, close(bs)), close2(bs), codec.codecDecode(bs))
+      HaveOutput(NeedInput(push, close(ByteString.empty)), close2(bs), codec.codecDecode(bs))
 
     def close(bs: ByteString): Conduit[ByteString, F, Text] = bs.uncons match {
       case None => Done(None, ())
@@ -55,7 +55,7 @@ sealed trait Codec {
   def codecDecode(b: ByteString): Text
 }
 
-class Utf8 extends Codec {
+object Utf8 extends Codec {
   def codecName = Text.pack("UTF-8")
 
   def codecEncode(t: Text) = {

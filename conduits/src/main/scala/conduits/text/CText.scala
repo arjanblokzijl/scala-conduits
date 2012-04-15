@@ -5,6 +5,8 @@ import binary.ByteString
 import pipes._
 import Pipe._
 import resourcet.MonadThrow
+import scalaz.Validation
+import scalaz.effect.IO
 
 
 object CText {
@@ -16,8 +18,8 @@ object CText {
     def close(bs: ByteString): Conduit[ByteString, F, Text] = bs.uncons match {
       case None => Done(None, ())
       case Some((w, _)) => {
-        val exc = MT.monadThrow[Conduit[ByteString, F, Text]](DecodeException(codec, w))
-        PipeM(exc, M.point(()))
+        val exc: F[pipes.Conduit[ByteString, F, Text]] = MT.monadThrow[Conduit[ByteString, F, Text]](DecodeException(codec, w))
+        PipeM(exc, M.map(exc)(_ => ()))
       }
     }
     def close2(bs: ByteString): F[Unit] = bs.uncons match {
@@ -27,6 +29,7 @@ object CText {
 
     NeedInput(push, close(ByteString.empty))
   }
+
 }
 
 /**
@@ -50,3 +53,6 @@ class Utf8 extends Codec {
 sealed trait TextException extends Exception
 case class DecodeException(codec: Codec, b: Byte) extends TextException
 case class EncodeException(codec: Codec, c: Char) extends TextException
+
+
+

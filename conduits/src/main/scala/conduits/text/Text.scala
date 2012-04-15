@@ -67,10 +67,10 @@ trait TextFunctions {
     new Text(ar)
   }
 
-  def fromCharBuffer(chars: java.nio.CharBuffer, size: Int = DefaultChunkSize): Text = {
+  def fromCharBuffer(chars: java.nio.CharBuffer): Text = {
     chars.rewind()
-    val ar = new Array[Char](size)
-    chars.get(ar)
+    val ar = new Array[Char](chars.remaining)
+    chars.get(ar, 0, chars.remaining)
     new Text(ar)
   }
 

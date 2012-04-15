@@ -24,6 +24,7 @@ object CText {
     })
   }
 
+  //TODO get better exception handling for decoding and fix the push function
   def decode[F[_]](codec: Codec)(implicit MT: MonadThrow[F]): Conduit[ByteString, F, Text] = {
     implicit val M = MT.M
     def push(bs: ByteString): Conduit[ByteString, F, Text] =

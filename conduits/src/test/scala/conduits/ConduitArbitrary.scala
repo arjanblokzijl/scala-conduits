@@ -17,5 +17,5 @@ object ConduitArbitrary {
 
    implicit def textArbitrary: Arbitrary[Text] = Arbitrary(Arbitrary.arbitrary[Array[Char]].map(new Text(_)))
 
-   implicit def charsetArbitrary: Arbitrary[Charset] = Arbitrary(Gen.oneOf(UTF8, UTF16, UTF16LE, UTF16BE))
+   implicit def charsetArbitrary: Arbitrary[Charset] = Arbitrary(Gen.oneOf(UTF8, UTF16))
 }

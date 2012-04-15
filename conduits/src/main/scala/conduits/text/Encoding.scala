@@ -24,9 +24,9 @@ object Encoding {
   }
 
   def encodeUtf8(t: Text): ByteString = {
-    val encoder: CharsetEncoder = Charset.forName("UTF-8").newEncoder
-    val bb = encoder.encode(t.toCharBuffer)
-    ByteString.fromByteBuffer(encoder.encode(t.toCharBuffer), bb.limit)
+    val encoder = UTF8.newEncoder
+    val bs = encoder.encode(t.toCharBuffer)
+    ByteString.fromByteBuffer(bs, bs.limit)
   }
 
   def decodeUtf8(bs: ByteString): Text =

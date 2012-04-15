@@ -7,6 +7,7 @@ import Pipe._
 import resourcet.MonadThrow
 import scalaz.Validation
 import scalaz.effect.IO
+import java.nio.charset.UnmappableCharacterException
 
 
 object CText {
@@ -57,14 +58,26 @@ sealed trait Codec {
 class Utf8 extends Codec {
   def codecName = Text.pack("UTF-8")
 
-  def codecEncode(t: Text) = (Encoding.encodeUtf8(t), None)
+  def codecEncode(t: Text) = {
+    try {
+      (Encoding.encodeUtf8(t), None)
+    } catch {
+      case e: UnmappableCharacterException => {
+        val index = e.getInputLength
+        val char = t(index)
+        (ByteString.empty, Some((EncodeException(this, char)), Text.empty))
+      }
+    }
+  }
 
   def codecDecode(bs: ByteString) =
     Encoding.decodeUtf8(bs)
 }
 
 sealed trait TextException extends Exception
+
 case class DecodeException(codec: Codec, b: Byte) extends TextException
+
 case class EncodeException(codec: Codec, c: Char) extends TextException
 
 

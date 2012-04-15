@@ -10,6 +10,19 @@ import scalaz.effect.IO
 
 
 object CText {
+
+  /**
+   * Convert text into bytes, using the provided codec. If the codec is
+   * unable to represent an input character, an exception is thrown.
+   */
+  def encode[F[_]](codec: Codec)(implicit MT: MonadThrow[F]): Conduit[Text, F, ByteString] = {
+    implicit val M = MT.M
+    CL.mapM[F, Text, ByteString](t => {
+      val (bx, mexc) = codec.codecEncode(t)
+      mexc.map(res => MT.monadThrow[ByteString](res._1)).getOrElse(M.point(bx))
+    })
+  }
+
   def decode[F[_]](codec: Codec)(implicit MT: MonadThrow[F]): Conduit[ByteString, F, Text] = {
     implicit val M = MT.M
     def push(bs: ByteString): Conduit[ByteString, F, Text] =

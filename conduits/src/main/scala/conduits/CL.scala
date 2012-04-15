@@ -101,6 +101,17 @@ object CL {
   }
 
   /**
+   * Apply a monadic transformation to all values in a stream.
+   */
+  def mapM[F[_], A, B](f: A => F[B])(implicit M: Monad[F]): Conduit[A, F, B] = {
+    def close = pipeMonoid[A, B, F].zero
+    def push: A => Conduit[A, F, B] = i =>
+      PipeM(M.map(f(i))(o => HaveOutput(NeedInput(push, close), M.point(()), o)), M.point(()))
+
+    NeedInput(push, close)
+  }
+
+  /**
    * Apply a transformation to all values in a stream, concatenating the output values.
    */
   def concatMap[F[_], A, B](f: A => Stream[B])(implicit M: Monad[F]): Conduit[A, F, B] = {

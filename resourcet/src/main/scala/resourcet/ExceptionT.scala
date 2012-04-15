@@ -2,9 +2,7 @@ package resourcet
 
 import scalaz._
 import Kleisli._
-/**
- * User: arjan
- */
+
 /**
  * The express purpose of this transformer is to allow non-@IO@-based monad
  * stacks to catch exceptions via the 'MonadThrow' typeclass.

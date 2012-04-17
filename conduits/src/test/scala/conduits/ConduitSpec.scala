@@ -14,6 +14,7 @@ import ConduitFunctions._
 import CL._
 import org.specs2.ScalaCheck
 import Conduits._
+import collection.immutable.Stream
 
 /**
  * User: arjan
@@ -91,6 +92,10 @@ class ConduitSpec extends Specification with ScalaCheck {
     "groupBy" in {
       val s = Stream(1, 1, 1, 2, 2, 2, 2, 3, 3, 4, 5)
       ((CL.groupBy[Id, Int]((a, b) => a == b) %= sourceList(s)) %%== consume) must be_===(Stream(Stream(1, 1, 1), Stream(2, 2, 2, 2), Stream(3, 3), Stream(4), Stream(5)))
+    }
+
+    "unfold" in {
+      (CL.unfold[Id, Int, Int](i => if (i > 20) None else Some(i, i + 1))(0) %%== CL.consume) must be_==(Stream.from(0).take(21))
     }
   }
 

@@ -29,6 +29,19 @@ object CL {
     sinkState[B, A, F, B](z, push, close)
   }
 
+  /**
+   * Generate a source from a seed value.
+   */
+  def unfold[F[_], A, B](f: B => Option[(A, B)])(b: => B)(implicit M: Monad[F]): Source[F, A] = {
+    def go(seed: => B): Source[F, A] = {
+      f(seed) match {
+        case None => Done(None, ())
+        case Some((a, seed1)) => HaveOutput(go(seed1), M.point(()), a)
+      }
+    }
+    go(b)
+  }
+
   def sum[F[_]](implicit M: Monad[F]): Sink[Int, F, Int] = foldLeft((0: Int))(_ + _)
 
   /**Take a single value from the stream, if available.*/

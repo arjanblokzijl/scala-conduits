@@ -258,6 +258,23 @@ trait PipeFunctions {
     HaveOutput(Done(None, ()), F.point(()), b)
 
   /**
+   * yieldBind is equivalent to yield b flatMap(_ => p), but the implementation is more efficient.
+   */
+  def yieldBind[A, B, F[_]](o: => B, p: => Pipe[A, B, F, Unit])(implicit F: Monad[F]): Pipe[A, B, F, Unit] =
+     HaveOutput(p, p.pipeClose, o)
+
+  /**
+   * equivalent to yield mapM_ yield, but is more efficient.
+   */
+  def yieldMany[A, B, F[_]](os: => Stream[B])(implicit F: Monad[F]): Pipe[A, B, F, Unit] = {
+    def go(s: => Stream[B]): Pipe[A, B, F, Unit] = s match {
+      case Stream.Empty => Done(None, ())
+      case x #:: xs => HaveOutput(go(xs), F.point(()), x)
+    }
+    go(os)
+  }
+
+  /**
    * Wait for a single input value from upstream, and remove it from the
    * stream. Returns [[scala.None]] if no more data is available.
    */

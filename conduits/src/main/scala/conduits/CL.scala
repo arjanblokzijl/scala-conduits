@@ -133,6 +133,17 @@ object CL {
   }
 
   /**
+   * Apply a monadic transformation to all values in a stream.
+   */
+  def mapM_[F[_], A, B](f: A => F[B])(implicit M: Monad[F]): Sink[A, F, Unit] = {
+    def close = pipeMonad[A, Void, F].point(())
+    def push: A => Sink[A, F, Unit] = i =>
+      PipeM(M.map(f(i))(_ => NeedInput(push, close)), M.point(()))
+
+    NeedInput(push, close)
+  }
+
+  /**
    * Apply a transformation to all values in a stream, concatenating the output values.
    */
   def concatMap[F[_], A, B](f: A => Stream[B])(implicit M: Monad[F]): Conduit[A, F, B] = {

@@ -15,6 +15,8 @@ import CL._
 import org.specs2.ScalaCheck
 import Conduits._
 import collection.immutable.Stream
+import org.specs2.internal.scalaz.CanBuildAnySelf.GenericCanBuildSelf
+import org.scalacheck.Gen
 
 /**
  * User: arjan
@@ -52,6 +54,11 @@ class ConduitSpec extends Specification with ScalaCheck {
 
   "concatMap" ! check {(s1: Stream[Int]) =>
     ((CL.concatMap[Id, Int, Int]((i: Int) => (i to (i + 9)).toStream) %= sourceList(s1)) %%== consume) must be_===(s1 flatMap(i => (i to (i + 9)).toStream))
+  }
+
+  "enumFromTo" ! check {(i: Int) =>
+    val start = math.min(Int.MaxValue - 20, i)
+    (CL.enumFromTo[Id, Int](start, start + 9) %%== consume) must be_===((start to (start + 9)).toStream)
   }
 
   "head takes the first element, if available" ! check {

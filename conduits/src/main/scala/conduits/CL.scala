@@ -42,9 +42,9 @@ object CL {
     go(b)
   }
 
-  def enumFromTo[F[_], A](start: => A, stop: => A)(implicit M: Monad[F], E: Equal[A], EN: scalaz.Enum[A]): Source[F, A] = {
+  def enumFromTo[F[_], A](start: => A, stop: => A)(implicit M: Monad[F], O: scalaz.Order[A], EN: scalaz.Enum[A]): Source[F, A] = {
     def go(i: => A): Source[F, A] = {
-      if (E.equal(i, stop)) HaveOutput(Done(None, ()), M.point(()), i)
+      if (O.greaterThanOrEqual(i, stop)) HaveOutput(Done(None, ()), M.point(()), i)
       else HaveOutput(go(EN.succ(i)), M.point(()), i)
     }
     go(start)

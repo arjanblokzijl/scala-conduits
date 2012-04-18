@@ -38,7 +38,7 @@ object ScalaConduitsBuild extends Build {
   lazy val standardSettings = Defaults.defaultSettings ++ Seq(
     organization := "com.github.ab",
     version := "0.1-SNAPSHOT",
-    scalaVersion := "2.9.1",
+    scalaVersion := "2.9.2",
 //    scalaVersion := "2.10.0-M2",
     crossPaths := false,
     scalacOptions  ++= Seq("-encoding", "UTF-8", "-deprecation", "-unchecked"),
@@ -47,8 +47,8 @@ object ScalaConduitsBuild extends Build {
   )
 
   object Dependencies {
-    def scalaz = "org.scalaz" % "scalaz-core_2.9.1" % "7.0-SNAPSHOT"
-    def scalazEffect = "org.scalaz" % "scalaz-effect_2.9.1" % "7.0-SNAPSHOT"
+    def scalaz = "org.scalaz" % "scalaz-core_2.9.2" % "7.0-SNAPSHOT"
+    def scalazEffect = "org.scalaz" % "scalaz-effect_2.9.2" % "7.0-SNAPSHOT"
     //lazy val specs = "org.scala-tools.testing" %% "specs" % "1.6.7" % "test" withSources ()
     def scalacheck = "org.scala-tools.testing" % "scalacheck_2.8.1" % "1.8" % "test"
 

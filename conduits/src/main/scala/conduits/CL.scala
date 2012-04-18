@@ -42,6 +42,14 @@ object CL {
     go(b)
   }
 
+  def enumFromTo[F[_], A](start: => A, stop: => A)(implicit M: Monad[F], E: Equal[A], EN: scalaz.Enum[A]): Source[F, A] = {
+    def go(i: => A): Source[F, A] = {
+      if (E.equal(i, stop)) HaveOutput(Done(None, ()), M.point(()), i)
+      else HaveOutput(go(EN.succ(i)), M.point(()), i)
+    }
+    go(start)
+  }
+
   def sum[F[_]](implicit M: Monad[F]): Sink[Int, F, Int] = foldLeft((0: Int))(_ + _)
 
   /**Take a single value from the stream, if available.*/

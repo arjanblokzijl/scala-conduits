@@ -5,9 +5,11 @@ import binary.ByteString
 import pipes._
 import Pipe._
 import resourcet.MonadThrow
-import scalaz.Validation
 import scalaz.effect.IO
 import java.nio.charset.UnmappableCharacterException
+import scalaz._
+import LazyOption._
+import std.function._
 
 
 object CText {
@@ -45,6 +47,15 @@ object CText {
     NeedInput(push, close(ByteString.empty))
   }
 
+  /**
+   * Evaluates the first argument, and returns LazySome if
+   * no exception occurs. Otherwise, LazyNone is returned.
+   */
+  def maybeDecode[A, B](a: => A, b: => B): LazyOption[(A, B)] =
+     try {
+       val a1 = a//evaluate first argument
+       lazySome(a1, b)
+     } catch {case e: Throwable => lazyNone}
 }
 
 /**
@@ -54,6 +65,7 @@ sealed trait Codec {
   def codecName: Text
   def codecEncode(t: Text): (ByteString, Option[(TextException, Text)])
   def codecDecode(b: ByteString): Text
+  def safeCodecDecode(b: ByteString): (Text, Either[(TextException, ByteString), ByteString])
 }
 
 object Utf8 extends Codec {
@@ -68,6 +80,41 @@ object Utf8 extends Codec {
         val char = t(index)
         (ByteString.empty, Some((EncodeException(this, char)), Text.empty))
       }
+    }
+  }
+
+  def safeCodecDecode(bs: ByteString) = {
+    val maxN = bs.length
+
+    def required(b: Byte): Int =
+      if ((b & 0x80) == 0x00) 1
+      else if ((b & 0xE0) == 0xC0) 2
+      else if ((b & 0xF0) == 0xE0) 3
+      else if ((b & 0xF8) == 0xF0) 4
+      else 0
+
+    def loop(n: Int): Option[(Text, ByteString)] = {
+      if (n == maxN) Some(Encoding.decodeUtf8(bs), ByteString.empty)
+      else {
+        val req = required(bs(n))
+        def tooLong = {
+          val (bs1, bs2) = bs.splitAt(n)
+          Some(Encoding.decodeUtf8(bs1), bs2)
+        }
+        def decodeMore: Option[(Text, ByteString)] = {
+          if (req == 0) None
+          else if (n + req > maxN) tooLong
+          else loop(n + req)
+        }
+        decodeMore
+      }
+    }
+
+    def splitQuickly(bs: ByteString): Option[(Text, ByteString)] = loop(0).flatMap(tb => CText.maybeDecode(tb._1, tb._2).toOption)
+
+    splitQuickly(bs) match {
+      case Some((text, extra)) => (text, Right(extra))
+      case None => (codecDecode(bs), Right(ByteString.empty))
     }
   }
 

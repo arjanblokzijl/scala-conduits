@@ -9,10 +9,17 @@ import effect.IO._
 import Encoding._
 import Conduits._
 import resourcet.MonadThrow._
+import org.specs2.ScalaCheck
 
-class CTextSpec extends Specification {
+class CTextSpec extends Specification with ScalaCheck {
 
-  "lazy text" should {
+  "encode decode UTF8" ! check {(s: String) =>
+    val t = new Text(s.getBytes(UTF8).map(_.toChar))
+    val res = CL.sourceList[IO, ByteString](Stream(encodeUtf8(t))) %= CText.decode[IO](Utf8) %%== CL.consume[IO, Text]
+    LText.fromChunks(res.unsafePerformIO).unpack must be_==(t.toStream)
+  }
+
+  "CText text" should {
     "simple string in single chunk" in {
       val t = Text.pack("abcdefg")
       val bs = Encoding.encodeUtf8(t)

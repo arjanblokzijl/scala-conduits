@@ -15,11 +15,4 @@ class EncodingSpec extends Specification with ScalaCheck {
      val res = decodeUtf8(encodeUtf8(t))
      ti.equal(t, res)
   }
-
-  "encoding and decoding text equals for supported charsets" ! check {(c: Charset, t: Text) =>
-     val enc = c.newEncoder
-     val dec = c.newDecoder
-     val res = decode(encode(t, enc), dec)
-     ti.equal(t, res)
-  }
 }

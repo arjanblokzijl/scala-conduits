@@ -26,11 +26,21 @@ object CText {
     })
   }
 
-  //TODO get better exception handling for decoding and fix the push function
   def decode[F[_]](codec: Codec)(implicit MT: MonadThrow[F]): Conduit[ByteString, F, Text] = {
     implicit val M = MT.M
-    def push(bs: ByteString): Conduit[ByteString, F, Text] =
-      HaveOutput(NeedInput(push, close(ByteString.empty)), close2(bs), codec.codecDecode(bs))
+
+    def push(bs: ByteString): Conduit[ByteString, F, Text] = {
+      val (text, extra) = codec.safeCodecDecode(bs)
+      extra match {
+        case Left((exc, _)) => PipeM(MT.monadThrow(exc), MT.monadThrow(exc))
+        case Right(bs1) => {
+          def app(bs2: ByteString): ByteString = bs1 append(bs2)
+          def close1 = close(bs1)
+          if (bs1.isEmpty) HaveOutput(NeedInput(push, close1), close2(bs), text)
+          else HaveOutput(NeedInput(bs => push(app(bs)), close1), close2(bs), text)
+        }
+      }
+    }
 
     def close(bs: ByteString): Conduit[ByteString, F, Text] = bs.uncons match {
       case None => Done(None, ())

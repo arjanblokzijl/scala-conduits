@@ -69,6 +69,9 @@ sealed trait Pipe[A, B, F[_], R] {
     through(this)
   }
 
+  /**
+   * Transforms the Monad a Pipe lives in.
+   */
   def transPipe[G[_]](f: Forall[({type λ[A] = F[A] => G[A]})#λ])(implicit M: Monad[F], G: Monad[G]): Pipe[A, B, G, R] = {
     def go(pipe: Pipe[A, B, F, R]): Pipe[A, B, G, R] = pipe match {
       case Done(a, b) => Done(a, b)
@@ -85,6 +88,21 @@ sealed trait Pipe[A, B, F[_], R] {
       case NeedInput(p, c) => NeedInput[A, C, F, R](i => go(p(i)), go(c))
       case HaveOutput(p, c, o) => HaveOutput[A, C, F, R](go(p), c, f(o))
       case PipeM(mp, c) => PipeM[A, C, F, R](M.map(mp)(p => go(p)), c)
+    }
+    go(this)
+  }
+
+  /**
+   * Add cleanup action to be run when the pipe cleans up.
+   * @param cleanup True if the Pipe ran to completion, false for early termination.
+   * @param M the Monad the Pipe lives in.
+   */
+  def addCleanup(cleanup: Boolean => F[Unit])(implicit M: Monad[F]): Pipe[A, B, F, R] = {
+    def go(pipe: Pipe[A, B, F, R]): Pipe[A, B, F, R] = pipe match {
+      case Done(leftover, r) => PipeM(M.map(cleanup(true))(_ => Done(leftover, r)), M.bind(cleanup(true))(_ => M.point(r)))
+      case NeedInput(p, c) => NeedInput[A, B, F, R](i => go(p(i)), go(c))
+      case HaveOutput(src, close, x) => HaveOutput[A, B, F, R](go(src), M.bind(cleanup(false))(_ => close), x)
+      case PipeM(msrc, close) => PipeM[A, B, F, R](M.map(msrc)(p => go(p)), M.bind(cleanup(false))(_ => close))
     }
     go(this)
   }

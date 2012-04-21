@@ -94,16 +94,4 @@ object SourceFunctions {
            M.point(()))
   }
 
-//  /**
-//   * Transform the monad a 'Source' lives in.
-//   *
-//   * Note that this will /not/ thread the individual monads together, meaning
-//   * side effects will be lost. This function is most useful for transformers
-//   * only providing context and not producing side-effects.
-//   */
-//  def transSource[F[_], G[_], A](f: Forall[({type λ[A] = F[A] => G[A]})#λ], source: Source[F, A])(implicit M: Monad[F], N: Monad[G]): Source[G, A] = source match {
-//    case Open(next, close, output) => Open(transSource(f, next), f.apply(close), output)
-//    case Closed() => Closed.apply[G, A]
-//    case SourceM(msrc, close) => SourceM[G, A](f.apply(M.map(msrc)(s => transSource(f, s))), f.apply(close))
-//  }
 }

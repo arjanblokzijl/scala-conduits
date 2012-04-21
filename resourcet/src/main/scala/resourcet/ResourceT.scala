@@ -58,15 +58,16 @@ trait ResourceTInstances extends ResourceTInstances0 {
       ResourceT[G, A](kleisli(s => M.map(ga)(identity)))
   }
 
-  implicit def resourceTMonadBaseIo = new MonadBase[IO, IO] {
+  implicit def ioMonadBaseIo = new MonadBase[IO, IO] {
     implicit def B: Monad[IO] = ioMonad
 
     implicit def F: Monad[IO] = ioMonad
 
     def liftBase[A](fa: => IO[A]) = fa
 
-    def liftBracket[A](init: IO[Unit], cleanup: IO[Unit], body: IO[A]): IO[A] = IOUtils.bracket_(init, cleanup, body)
+    def liftBracket[A](init: IO[Unit], cleanup: IO[Unit], body: IO[A]): IO[A] = init.bracket_(cleanup)(body)
   }
+
 
   implicit def resourceTMonadResource[F[_]](implicit F0: MonadIO[F], B0: MonadBase[IO, F]): MonadResource[({type l[a] = ResourceT[F, a]})#l] = new MonadResource[({type l[a] = ResourceT[F, a]})#l] {
     implicit def MO = resourceTMonadIO[F]
@@ -79,13 +80,10 @@ trait ResourceTInstances extends ResourceTInstances0 {
       F0.liftIO(IOUtils.mask[A, (ReleaseKey, A)](restore =>
         ioMonad.bind(restore(acquire))(a => ioMonad.map(resource.register(istate, rel(a)))(key => (key, a)))))))
 
-//    def resourceMask[F[_], B](f: Forall[({type λ[A] = ResourceT[IO, A] => ResourceT[IO, A]})#λ] => ResourceT[IO, B]): F[B] = {
-//
-//    }
   }
 }
 
-private trait ResourceTMonad[F[_]] extends Monad[({type l[a] = ResourceT[F, a]})#l] {
+private[resourcet] trait ResourceTMonad[F[_]] extends Monad[({type l[a] = ResourceT[F, a]})#l] {
   implicit def F: Monad[F]
 
   def bind[A, B](fa: ResourceT[F, A])(f: (A) => ResourceT[F, B]): ResourceT[F, B] =

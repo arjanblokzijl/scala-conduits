@@ -4,9 +4,6 @@ import scalaz.effect.{IORef, IO}
 import scalaz.Monad
 
 
-/**
- * User: arjan
- */
 
 trait MonadBase[B[_], F[_]] {
   implicit def B: Monad[B]

@@ -166,12 +166,12 @@ trait LByteStringFunctions {
     def loop: IO[LByteString] = {
       ByteString.getContents(chan, capacity).flatMap((bs: ByteString) =>
         if (bs.isEmpty) IO(chan.close) flatMap(_ => IO(Empty.apply))
-        else {
+        else
           for {
             cs <- loop.unsafeInterleaveIO
             lbs <- io(rw => cs.map(c => rw -> Chunk(bs, c)))
           } yield lbs
-        })
+        )
     }
     loop
   }

@@ -10,6 +10,7 @@ import java.nio.charset.UnmappableCharacterException
 import scalaz._
 import LazyOption._
 import std.function._
+import ConduitFunctions._
 
 
 object CText {
@@ -26,6 +27,10 @@ object CText {
     })
   }
 
+  /**
+   * Convert bytes into text, using the provided codec. If the codec is
+   * not capable of decoding an input byte sequence, an Exception will be thrown.
+   */
   def decode[F[_]](codec: Codec)(implicit MT: MonadThrow[F]): Conduit[ByteString, F, Text] = {
     implicit val M = MT.M
 
@@ -56,31 +61,32 @@ object CText {
 
     NeedInput(push, close(ByteString.empty))
   }
-//
-//  -- | Emit each line separately
-//  --
-//  -- Since 0.4.1
-//  lines :: Monad m => C.Conduit T.Text m T.Text
-//  lines =
-//      C.conduitState id push close
-//    where
-//      push front bs' = return $ C.StateProducing leftover ls
-//        where
-//          bs = front bs'
-//          (leftover, ls) = getLines id bs
-//
-//      getLines front bs
-//          | T.null bs = (id, front [])
-//          | T.null y = (T.append x, front [])
-//          | otherwise = getLines (front . (x:)) (T.drop 1 y)
-//        where
-//          (x, y) = T.break (== '\n') bs
-//
-//      close front
-//          | T.null bs = return []
-//          | otherwise = return [bs]
-//        where
-//          bs = front T.empty
+
+  /**
+   * Split the given Text into lines.
+   */
+  def lines[F[_]](implicit M: Monad[F]): Conduit[Text, F, Text] = {
+    import scalaz.std.stream._
+    def add[A](l1: Stream[A], l2: => Stream[A]): Stream[A] = streamInstance.plus(l1, l2)
+    def push[S](front: => Stream[Text], bs: => Text): F[ConduitStateResult[Stream[Text], Text, Text]] = {
+      val (leftover, ls) = getLines(front, bs)
+      M.point(StateProducing(leftover, ls))
+    }
+
+    def close(front: => Stream[Text]): F[Stream[Text]] =
+      if (front.isEmpty) M.point(Stream.Empty)
+      else M.point(front)
+
+
+    def getLines(front: Stream[Text], bs: => Text): (Stream[Text], Stream[Text]) = {
+      val (x, y) = bs.span(_ != '\n')
+      if (bs.isEmpty) (Stream.Empty, front)
+      else if (y.isEmpty) (Stream(x), front)
+      else getLines(add(front, Stream(x)), y.drop(1))
+    }
+    conduitState(Stream.Empty, push, close)
+  }
+
   /**
    * Evaluates the first argument, and returns LazySome if
    * no exception occurs. Otherwise, LazyNone is returned.

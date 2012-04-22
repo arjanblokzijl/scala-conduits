@@ -15,8 +15,6 @@ import CL._
 import org.specs2.ScalaCheck
 import Conduits._
 import collection.immutable.Stream
-import org.specs2.internal.scalaz.CanBuildAnySelf.GenericCanBuildSelf
-import org.scalacheck.Gen
 
 /**
  * User: arjan

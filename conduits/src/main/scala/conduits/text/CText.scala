@@ -30,7 +30,7 @@ object CText {
     implicit val M = MT.M
 
     def push(bs: ByteString): Conduit[ByteString, F, Text] = {
-      val (text, extra) = codec.safeCodecDecode(bs)
+      val (text, extra) = codec.codecDecode(bs)
       extra match {
         case Left((exc, _)) => PipeM(MT.monadThrow(exc), MT.monadThrow(exc))
         case Right(bs1) => {
@@ -56,7 +56,31 @@ object CText {
 
     NeedInput(push, close(ByteString.empty))
   }
-
+//
+//  -- | Emit each line separately
+//  --
+//  -- Since 0.4.1
+//  lines :: Monad m => C.Conduit T.Text m T.Text
+//  lines =
+//      C.conduitState id push close
+//    where
+//      push front bs' = return $ C.StateProducing leftover ls
+//        where
+//          bs = front bs'
+//          (leftover, ls) = getLines id bs
+//
+//      getLines front bs
+//          | T.null bs = (id, front [])
+//          | T.null y = (T.append x, front [])
+//          | otherwise = getLines (front . (x:)) (T.drop 1 y)
+//        where
+//          (x, y) = T.break (== '\n') bs
+//
+//      close front
+//          | T.null bs = return []
+//          | otherwise = return [bs]
+//        where
+//          bs = front T.empty
   /**
    * Evaluates the first argument, and returns LazySome if
    * no exception occurs. Otherwise, LazyNone is returned.
@@ -73,9 +97,9 @@ object CText {
  */
 sealed trait Codec {
   def codecName: Text
-  def codecEncode(t: Text): (ByteString, Option[(TextException, Text)])
-  def codecDecode(b: ByteString): Text
-  def safeCodecDecode(b: ByteString): (Text, Either[(TextException, ByteString), ByteString])
+  def codecEncode(t: Text): (ByteString, LazyOption[(TextException, Text)])
+  def codecDecode(b: ByteString): (Text, Either[(TextException, ByteString), ByteString])
+  def fallBackDecode(b: ByteString): (Text, Either[(TextException, ByteString), ByteString])
 }
 
 object Utf8 extends Codec {
@@ -83,17 +107,17 @@ object Utf8 extends Codec {
 
   def codecEncode(t: Text) = {
     try {
-      (Encoding.encodeUtf8(t), None)
+      (Encoding.encodeUtf8(t), lazyNone)
     } catch {
       case e: UnmappableCharacterException => {
         val index = e.getInputLength
         val char = t(index)
-        (ByteString.empty, Some((EncodeException(this, char)), Text.empty))
+        (ByteString.empty, lazySome((EncodeException(this, char)), Text.empty))
       }
     }
   }
 
-  def safeCodecDecode(bs: ByteString) = {
+  def codecDecode(bs: ByteString) = {
     val maxN = bs.length
 
     def required(b: Byte): Int =
@@ -103,16 +127,16 @@ object Utf8 extends Codec {
       else if ((b & 0xF8) == 0xF0) 4
       else 0
 
-    def loop(n: Int): Option[(Text, ByteString)] = {
-      if (n == maxN) Some(Encoding.decodeUtf8(bs), ByteString.empty)
+    def loop(n: Int): LazyOption[(Text, ByteString)] = {
+      if (n == maxN) lazySome(Encoding.decodeUtf8(bs), ByteString.empty)
       else {
         val req = required(bs(n))
         def tooLong = {
           val (bs1, bs2) = bs.splitAt(n)
-          Some(Encoding.decodeUtf8(bs1), bs2)
+          lazySome(Encoding.decodeUtf8(bs1), bs2)
         }
-        def decodeMore: Option[(Text, ByteString)] = {
-          if (req == 0) None
+        def decodeMore: LazyOption[(Text, ByteString)] = {
+          if (req == 0) lazyNone
           else if (n + req > maxN) tooLong
           else loop(n + req)
         }
@@ -120,16 +144,22 @@ object Utf8 extends Codec {
       }
     }
 
-    def splitQuickly(bs: ByteString): Option[(Text, ByteString)] = loop(0).flatMap(tb => CText.maybeDecode(tb._1, tb._2).toOption)
+    def splitQuickly(bs: ByteString): LazyOption[(Text, ByteString)] = loop(0).flatMap(tb => CText.maybeDecode(tb._1, tb._2))
 
-    splitQuickly(bs) match {
-      case Some((text, extra)) => (text, Right(extra))
-      case None => (codecDecode(bs), Right(ByteString.empty))
-    }
+    splitQuickly(bs).fold(te => (te._1, Right(te._2)), fallBackDecode(bs))
   }
 
-  def codecDecode(bs: ByteString) =
-    Encoding.decodeUtf8(bs)
+  def fallBackDecode(bs: ByteString) = {
+    try {
+      (Encoding.decodeUtf8(bs), Right(ByteString.empty))
+    } catch {
+      case e: UnmappableCharacterException => {
+        val index = e.getInputLength
+        val byte = bs(index)
+        (Text.empty, Left((DecodeException(this, byte)), bs.splitAt(index)._2))
+      }
+    }
+  }
 }
 
 sealed trait TextException extends Exception

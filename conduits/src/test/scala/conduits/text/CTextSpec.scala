@@ -27,5 +27,12 @@ class CTextSpec extends Specification with ScalaCheck {
       val ltext: LText = LText.fromChunks(res.unsafePerformIO)
       ltext.unpack must be_==(t.toStream)
     }
+    "encode decode in different charsets are not be equal" in {
+      val s: String = "abcdefghijk"
+      val t = new Text(s.getBytes(UTF8).map(_.toChar))
+      val t2 = new Text(s.getBytes(UTF16).map(_.toChar))
+      val res = CL.sourceList[IO, ByteString](Stream(encodeUtf8(t2))) %= CText.decode[IO](Utf8) %%== CL.consume[IO, Text]
+      LText.fromChunks(res.unsafePerformIO).unpack mustNotEqual(t.toStream)
+    }
   }
 }

@@ -24,14 +24,17 @@ object Encoding {
     ByteString.fromByteBuffer(bs, bs.limit)
   }
 
-  def encodeUtf8(t: Text): ByteString = {
-    val encoder = UTF8.newEncoder
-    val bs = encoder.encode(t.toCharBuffer)
-    ByteString.fromByteBuffer(bs, bs.limit)
-  }
+  def encodeUtf8(t: Text): ByteString =
+    encode(t, UTF8.newEncoder)
+
+  def encodeAscii(t: Text): ByteString =
+    encode(t, ASCII.newEncoder)
 
   def decodeUtf8(bs: ByteString): Text =
     decode(bs, UTF8.newDecoder)
+
+  def decodeAscii(bs: ByteString): Text =
+    decode(bs, ASCII.newDecoder)
 
   def decode(bs: ByteString, decoder: CharsetDecoder): Text =
     Text.fromCharBuffer(decoder.decode(bs.toByteBuffer))

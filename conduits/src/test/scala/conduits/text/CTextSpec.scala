@@ -10,9 +10,9 @@ import Conduits._
 import resourcet.MonadThrow._
 import org.specs2.ScalaCheck
 import conduits.CL._
-import binary.{Binary, ByteString}
 import collection.Iterator
 import collection.immutable.Stream
+import binary.{Char8, Binary, ByteString}
 
 class CTextSpec extends Specification with ScalaCheck {
 
@@ -43,6 +43,13 @@ class CTextSpec extends Specification with ScalaCheck {
       val res = CL.sourceList[IO, ByteString](Stream(encodeUtf8(t2))) %= CText.decode[IO](Utf8) %%== CL.consume[IO, Text]
       LText.fromChunks(res.unsafePerformIO).unpack mustNotEqual(t.toStream)
     }
+    "encode decode ASCII" in {
+      val chars = new String((-127 to 127).map(_.toChar).toArray)
+      val bs = Char8.pack(chars)
+      val res = CL.sourceList[IO, ByteString](Stream(bs)) %= CText.decode[IO](Ascii) %%== CL.consume[IO, Text]
+      LText.fromChunks(res.unsafePerformIO).unpack must be_==(chars.toStream)
+    }
+
     "lines" in {
       val s: String = "01234\n5678\n9"
       val actual: Stream[Text] = sourceList[Id, Text](Stream(Text.pack(s))) %%== CText.lines[Id] =% consume

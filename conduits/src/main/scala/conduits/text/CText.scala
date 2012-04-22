@@ -1,16 +1,18 @@
 package conduits
 package text
 
-import binary.ByteString
 import pipes._
 import Pipe._
 import resourcet.MonadThrow
 import scalaz.effect.IO
 import java.nio.charset.UnmappableCharacterException
 import scalaz._
+import std.anyVal.char
+import std.anyVal.byteInstance
 import LazyOption._
 import std.function._
 import ConduitFunctions._
+import binary.{Char8, ByteString}
 
 
 object CText {
@@ -168,10 +170,31 @@ object Utf8 extends Codec {
   }
 }
 
+object Ascii extends Codec {
+
+  def codecName = Text.pack("ASCII")
+
+  def codecEncode(t: Text) = {
+    val (safe, unsafe) = t.span(c => char.lessThanOrEqual(c, 0x7F.toChar))
+    val bytes = Char8.pack(safe.unpack)
+    val extra: LazyOption[(TextException, Text)] = if (unsafe.isEmpty) lazyNone
+                else lazySome((EncodeException(Ascii, unsafe.head), unsafe))
+    (bytes, extra)
+  }
+
+  def codecDecode(bs: ByteString) = {
+    val (safe, unsafe) = bs.span(b => byteInstance.lessThanOrEqual(b, 0x7F.toByte))
+    val text = Text.pack(Char8.unpack(safe))
+    val extra = if (unsafe.isEmpty) Right(ByteString.empty)
+                else Left(DecodeException(Ascii, unsafe.head), unsafe)
+    (text, extra)
+  }
+
+  def fallBackDecode(b: ByteString) = codecDecode(b)
+}
+
 sealed trait TextException extends Exception
-
 case class DecodeException(codec: Codec, b: Byte) extends TextException
-
 case class EncodeException(codec: Codec, c: Char) extends TextException
 
 

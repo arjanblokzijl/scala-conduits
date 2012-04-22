@@ -17,6 +17,7 @@ object Encoding {
   val ISO8859 = charset("ISO-8859-1")
   val UTF16BE = charset("UTF-16BE")
   val UTF16LE = charset("UTF-16LE")
+  val ASCII = charset("ASCII")
 
   def encode(t: Text, encoder: CharsetEncoder): ByteString = {
     val bs = encoder.encode(t.toCharBuffer)

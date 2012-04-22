@@ -49,7 +49,7 @@ object Conduits {
     def lazyConsume(implicit M: MonadControlIO[F], MA: MonadActive[F]): F[Stream[A]] = Lazy.lazyConsume(src)
   }
 
-  class ConduitW[F[_], A, B](c: Conduit[A, F, B]) {
+  class ConduitOps[F[_], A, B](c: Conduit[A, F, B]) {
     /**
      * Right fuse, combining a Conduit and a Sink together into a new Sink.
      */
@@ -68,7 +68,7 @@ object Conduits {
     def =%=[C, R](p2: Pipe[B, C, F, R])(implicit M: Monad[F]): Pipe[A, C, F, R] = pipe(c, p2)
   }
 
-  implicit def pToSource[F[_], A](s: Source[F, A]) = new SourceOps(s)
-  implicit def pToConduit[F[_], A, B](c: Conduit[A, F, B]) = new ConduitW(c)
+  implicit def ToSourceOps[F[_], A](s: Source[F, A]) = new SourceOps(s)
+  implicit def ToConduitOps[F[_], A, B](c: Conduit[A, F, B]) = new ConduitOps(c)
 }
 

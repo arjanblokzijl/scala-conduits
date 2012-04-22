@@ -71,4 +71,3 @@ object Conduits {
   implicit def ToSourceOps[F[_], A](s: Source[F, A]) = new SourceOps(s)
   implicit def ToConduitOps[F[_], A, B](c: Conduit[A, F, B]) = new ConduitOps(c)
 }
-

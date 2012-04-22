@@ -5,7 +5,6 @@ import pipes._
 import Pipe._
 import resourcet.MonadThrow
 import scalaz.effect.IO
-import java.nio.charset.UnmappableCharacterException
 import scalaz._
 import std.anyVal.char
 import std.anyVal.byteInstance
@@ -13,6 +12,7 @@ import LazyOption._
 import std.function._
 import ConduitFunctions._
 import binary.{Char8, ByteString}
+import java.nio.charset.{CharsetDecoder, UnmappableCharacterException}
 
 
 object CText {
@@ -106,8 +106,17 @@ object CText {
 sealed trait Codec {
   def codecName: Text
   def codecEncode(t: Text): (ByteString, LazyOption[(TextException, Text)])
-  def codecDecode(b: ByteString): (Text, Either[(TextException, ByteString), ByteString])
-  def fallBackDecode(b: ByteString): (Text, Either[(TextException, ByteString), ByteString])
+  def codecDecode(bs: ByteString): (Text, Either[(TextException, ByteString), ByteString])
+  def defaultDecode(bs: ByteString)(decoder: CharsetDecoder): (Text, Either[(TextException, ByteString), ByteString]) =
+    try {
+      (Encoding.decodeUtf8(bs), Right(ByteString.empty))
+    } catch {
+      case e: UnmappableCharacterException => {
+        val index = e.getInputLength
+        val byte = bs(index)
+        (Text.empty, Left((DecodeException(this, byte)), bs.splitAt(index)._2))
+      }
+    }
 }
 
 object Utf8 extends Codec {
@@ -154,19 +163,7 @@ object Utf8 extends Codec {
 
     def splitQuickly(bs: ByteString): LazyOption[(Text, ByteString)] = loop(0).flatMap(tb => CText.maybeDecode(tb._1, tb._2))
 
-    splitQuickly(bs).fold(te => (te._1, Right(te._2)), fallBackDecode(bs))
-  }
-
-  def fallBackDecode(bs: ByteString) = {
-    try {
-      (Encoding.decodeUtf8(bs), Right(ByteString.empty))
-    } catch {
-      case e: UnmappableCharacterException => {
-        val index = e.getInputLength
-        val byte = bs(index)
-        (Text.empty, Left((DecodeException(this, byte)), bs.splitAt(index)._2))
-      }
-    }
+    splitQuickly(bs).fold(te => (te._1, Right(te._2)), defaultDecode(bs)(Encoding.UTF8.newDecoder))
   }
 }
 
@@ -189,8 +186,6 @@ object Ascii extends Codec {
                 else Left(DecodeException(Ascii, unsafe.head), unsafe)
     (text, extra)
   }
-
-  def fallBackDecode(b: ByteString) = codecDecode(b)
 }
 
 sealed trait TextException extends Exception

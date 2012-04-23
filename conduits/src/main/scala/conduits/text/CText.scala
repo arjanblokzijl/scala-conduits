@@ -127,12 +127,14 @@ object Utf8 extends Codec {
   def codecDecode(bs: ByteString) = {
     val maxN = bs.length
 
+    //the bit twiddling is to determine how many bytes form a character.
+    //UTF-8 has maximum number of 4 bytes, where the higher order bit pattern determines the total number.
     def required(b: Byte): Int =
       if ((b & 0x80) == 0x00) 1
       else if ((b & 0xE0) == 0xC0) 2
       else if ((b & 0xF0) == 0xE0) 3
       else if ((b & 0xF8) == 0xF0) 4
-      else 0
+      else 0 //invalid input, we'll get an exception
 
     def loop(n: Int): LazyOption[(Text, ByteString)] = {
       if (n == maxN) lazySome(Encoding.decodeUtf8(bs), ByteString.empty)
@@ -154,6 +156,39 @@ object Utf8 extends Codec {
     def splitQuickly(bs: ByteString): LazyOption[(Text, ByteString)] = loop(0).flatMap(tb => maybeDecode(tb._1, tb._2))
 
     splitQuickly(bs).fold(te => (te._1, Right(te._2)), splitSlowly(Encoding.decodeUtf8, bs))
+  }
+}
+
+object Utf16_le extends Codec {
+  def codecName = Text.pack("UTF-16LE")
+
+  def codecEncode(t: Text) = (Encoding.encodeUtf16Le(t), lazyNone)
+
+
+  def codecDecode(bytes: ByteString) = {
+    val maxN = bytes.length
+    def decodeAll = (Encoding.decodeUtf16Le(bytes), ByteString.empty)
+    def decodeTo(n: Int) = {
+      val (bs1, bs2) = bytes.splitAt(n)
+      (Encoding.decodeUtf16Le(bs1), bs2)
+    }
+    def loop(n: Int): (Text, ByteString) = {
+      if (n == maxN) decodeAll
+      else {
+        val req = utf16Required(bytes(n), bytes(n + 1))
+        def decodeMore: (Text, ByteString) = {
+          if ((n + req) > maxN) decodeTo(n)
+          else loop(n + req)
+        }
+        decodeMore
+      }
+    }
+    def splitQuickly(bs: ByteString): LazyOption[(Text, ByteString)] = {
+      val (f, s) = loop(0)
+      maybeDecode[Text, ByteString](f, s)
+    }
+
+    splitQuickly(bytes).fold(te => (te._1, Right(te._2)), splitSlowly(Encoding.decodeUtf16Le, bytes))
   }
 }
 
@@ -219,6 +254,12 @@ object CTextFunctions {
       }
     }
     splits.flatMap{case (a, b) => decFirst(a, b)}.head
+  }
+
+  def utf16Required(x0: Byte, x1: Byte): Int = {
+    val x = x1.toShort << 8 | x0.toShort
+    if (x >= 0xD800.toShort && x <= 0xDBFF.toShort) 4
+    else 2
   }
 }
 

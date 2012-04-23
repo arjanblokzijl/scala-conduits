@@ -93,11 +93,39 @@ object CText {
    * Evaluates the first argument, and returns LazySome if
    * no exception occurs. Otherwise, LazyNone is returned.
    */
-  def maybeDecode[A, B](a: => A, b: => B): LazyOption[(A, B)] =
+  private[text] def maybeDecode[A, B](a: => A, b: => B): LazyOption[(A, B)] =
      try {
        val a1 = a//evaluate first argument
        lazySome(a1, b)
      } catch {case e: Throwable => lazyNone}
+
+  private[text] def byteSplits(bytes: ByteString): Seq[(ByteString, ByteString)] = {
+    def loop(n: Int): Seq[(ByteString, ByteString)] =
+      if (n == 0) Seq((ByteString.empty, bytes))
+      else bytes.splitAt(n) +: loop(n - 1)
+    loop(bytes.length)
+  }
+
+  private[text] def splitSlowly(dec: ByteString => Text, bytes: ByteString): (Text, Either[(TextException, ByteString), ByteString]) = {
+    val splits = byteSplits(bytes)
+    def tryDec(bs: ByteString, dec: ByteString => Text): Either[TextException, Text] =
+       try {
+         Right(dec(bs))
+       } catch {case e: TextException => Left(e)}
+
+    def decFirst(bs1: ByteString, bs2: ByteString): Option[(Text, Either[(TextException, ByteString), ByteString])] = {
+      tryDec(bs1, dec) match {
+        case Left(_) => None
+        case Right(text) => Some((text, tryDec(bs2, dec) match {
+          case Left(exc) => Left(exc, bs2)
+          //we can't get to the match below, since this method is only called as fallback
+          //after normal parsing has failed to provide better error reporting.
+          case Right(_) => Right(ByteString.empty)
+        }))
+      }
+    }
+    splits.flatMap{case (a, b) => decFirst(a, b)}.head
+  }
 }
 
 /**
@@ -163,7 +191,7 @@ object Utf8 extends Codec {
 
     def splitQuickly(bs: ByteString): LazyOption[(Text, ByteString)] = loop(0).flatMap(tb => CText.maybeDecode(tb._1, tb._2))
 
-    splitQuickly(bs).fold(te => (te._1, Right(te._2)), defaultDecode(bs)(Encoding.UTF8.newDecoder))
+    splitQuickly(bs).fold(te => (te._1, Right(te._2)), CText.splitSlowly(Encoding.decodeUtf8, bs))
   }
 }
 

@@ -79,11 +79,10 @@ object CText {
       if (front.isEmpty) M.point(Stream.Empty)
       else M.point(front)
 
-
     def getLines(front: Stream[Text], bs: => Text): (Stream[Text], Stream[Text]) = {
       val (x, y) = bs.span(_ != '\n')
-      if (bs.isEmpty) (Stream.Empty, front)
-      else if (y.isEmpty) (Stream(x), front)
+      if (bs.isEmpty) (Stream.empty, front)
+      else if (y.isEmpty) (Stream.empty, add(front, Stream(x)))
       else getLines(add(front, Stream(x)), y.drop(1))
     }
     conduitState(Stream.Empty, push, close)
@@ -163,7 +162,6 @@ object Utf16_le extends Codec {
   def codecName = Text.pack("UTF-16LE")
 
   def codecEncode(t: Text) = (Encoding.encodeUtf16Le(t), lazyNone)
-
 
   def codecDecode(bytes: ByteString) = {
     val maxN = bytes.length

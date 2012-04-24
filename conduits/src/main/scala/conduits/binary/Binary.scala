@@ -133,7 +133,6 @@ object Binary {
   }
 
   def lines[F[_]](implicit M: Monad[F]): Conduit[ByteString, F, ByteString] = {
-    //TODO this is very likely not very efficient
     import scalaz.std.stream._
     def add[A](l1: Stream[A], l2: => Stream[A]): Stream[A] = streamInstance.plus(l1, l2)
     def push[S](front: => Stream[ByteString], bs: => ByteString): F[ConduitStateResult[Stream[ByteString], ByteString, ByteString]] = {
@@ -148,8 +147,8 @@ object Binary {
 
     def getLines(front: Stream[ByteString], bs: => ByteString): (Stream[ByteString], Stream[ByteString]) = {
       val (x, y) = bs.span(_ != 10.toByte)
-      if (bs.isEmpty) (Stream.Empty, front)
-      else if (y.isEmpty) (Stream(x), front)
+      if (bs.isEmpty) (Stream.empty, front)
+      else if (y.isEmpty) (Stream.empty, add(front, Stream(x)))
       else getLines(add(front, Stream(x)), y.drop(1))
     }
     conduitState(Stream.Empty, push, close)

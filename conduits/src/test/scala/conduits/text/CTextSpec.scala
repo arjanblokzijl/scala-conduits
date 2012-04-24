@@ -12,7 +12,8 @@ import org.specs2.ScalaCheck
 import conduits.CL._
 import collection.Iterator
 import collection.immutable.Stream
-import binary.{Char8, Binary, ByteString}
+import ConduitArbitrary._
+import binary.{LByteString, Char8, Binary, ByteString}
 
 class CTextSpec extends Specification with ScalaCheck {
 
@@ -34,11 +35,11 @@ class CTextSpec extends Specification with ScalaCheck {
     LText.fromChunks(res.unsafePerformIO).unpack must be_==(t.toStream)
   }
 
-  "ctext lines" ! check { (s: String) =>
-    val actual = sourceList[Id, Text](Stream(new Text(s.toCharArray))) %%== CText.lines[Id] =% consume
-    val expected = s.lines.map(Text.pack).toStream
-    actual must be_== (expected)
-  }
+//  "ctext lines" ! check { (s: String) =>
+//    val actual = sourceList[Id, Text](Stream(new Text(s.toCharArray))) %%== CText.lines[Id] =% consume
+//    val expected = s.lines.map(Text.pack).toStream
+//    actual must be_== (expected)
+//  }
 
   "CText text" should {
     "simple string in single chunk" in {
@@ -61,12 +62,26 @@ class CTextSpec extends Specification with ScalaCheck {
       val res = CL.sourceList[IO, ByteString](Stream(bs)) %= CText.decode[IO](Ascii) %%== CL.consume[IO, Text]
       LText.fromChunks(res.unsafePerformIO).unpack must be_==(chars.toStream)
     }
-
-    "lines" in {
+  }
+  "split lines" should {
+    "multiple lines in single string" in {
       val s: String = "01234\n5678\n9"
       val actual: Stream[Text] = sourceList[Id, Text](Stream(Text.pack(s))) %%== CText.lines[Id] =% consume
       val expected = s.lines.map(Text.pack).toStream
       actual must be_==(expected)
+    }
+    "split items" in {
+      val s: String = "0123\n4\n5\n678\n9"
+      val texts = Stream(Text.pack("0123\n4"), Text.pack("5\n"), Text.pack("678\n9"))
+      val actual: Stream[Text] = sourceList[Id, Text](texts) %%== CText.lines[Id] =% consume
+      val expected = s.lines.map(Text.pack).toStream
+      actual must be_==(expected)
+    }
+    "line ending at the end" in {
+      val s: String = "012345678\n"
+      val actual: Stream[Text] = sourceList[Id, Text](Stream(Text.pack(s))) %%== CText.lines[Id] =% consume
+      actual must have length 1
+      actual.head.toString must be_==("012345678")
     }
   }
 }

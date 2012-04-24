@@ -32,6 +32,8 @@ final class Text(chars: Array[Char]) extends IndexedSeq[Char] with IndexedSeqOpt
   def unpack: String = new String(arr)
 
   def &:(c: Char): Text = cons(c, this)
+
+  override def toString: String = new String(toArray)
 }
 
 trait TextFunctions {

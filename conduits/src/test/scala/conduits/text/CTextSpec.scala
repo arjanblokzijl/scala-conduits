@@ -16,9 +16,15 @@ import binary.{Char8, Binary, ByteString}
 
 class CTextSpec extends Specification with ScalaCheck {
 
-  "encode decode UTF8" ! check {(s: String) =>
-    val t = new Text(s.getBytes(UTF8).map(_.toChar))
+  "encode decode UTF8" ! check {(chars: Array[Char]) =>
+    val t = new Text(chars)
     val res = CL.sourceList[IO, ByteString](Stream(encodeUtf8(t))) %= CText.decode[IO](Utf8) %%== CL.consume[IO, Text]
+    LText.fromChunks(res.unsafePerformIO).unpack must be_==(t.toStream)
+  }
+
+  "encode decode UTF16_LE" ! check {(chars: Array[Char]) =>
+    val t = new Text(chars)
+    val res = CL.sourceList[IO, ByteString](Stream(encodeUtf16Le(t))) %= CText.decode[IO](Utf16_le) %%== CL.consume[IO, Text]
     LText.fromChunks(res.unsafePerformIO).unpack must be_==(t.toStream)
   }
 

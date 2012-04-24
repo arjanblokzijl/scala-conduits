@@ -23,7 +23,6 @@ A producer of data. The data could be in a file, coming from a socket, or in mem
 To access this data, we pull from the source.
 
 * Sink
-
 A consumer of data. Basic examples would be a sum function (adding up a stream of numbers fed in),
 a file sink (which writes all incoming bytes to a file), or a socket.
 We push data into a sink. When the sink finishes processing it returns some value.

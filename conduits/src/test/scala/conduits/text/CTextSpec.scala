@@ -62,6 +62,12 @@ class CTextSpec extends Specification with ScalaCheck {
       val res = CL.sourceList[IO, ByteString](Stream(bs)) %= CText.decode[IO](Ascii) %%== CL.consume[IO, Text]
       LText.fromChunks(res.unsafePerformIO).unpack must be_==(chars.toStream)
     }
+    "is lazy" in {
+      val t = Text.pack("abcdefg")
+      val bs = Encoding.encodeUtf8(t)
+      val actual: IO[Option[Text]] = sourceList[IO, ByteString](Stream(bs, sys.error("ignore"))) %%== CText.decode[IO](Utf8) =% CL.head[IO, Text]
+      actual.unsafePerformIO must be_==(Some("abcdefg"))
+    }
   }
   "split lines" should {
     "multiple lines in single string" in {
@@ -83,5 +89,9 @@ class CTextSpec extends Specification with ScalaCheck {
       actual must have length 1
       actual.head.toString must be_==("012345678")
     }
+
+//    it "is not too eager" $ do
+//        x <- CL.sourceList ["foobarbaz", error "ignore me"] C.$$ CT.decode CT.utf8 C.=$ CL.head
+//        x @?= Just "foobarbaz"
   }
 }

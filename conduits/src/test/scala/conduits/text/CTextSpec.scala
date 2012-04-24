@@ -28,6 +28,12 @@ class CTextSpec extends Specification with ScalaCheck {
     LText.fromChunks(res.unsafePerformIO).unpack must be_==(t.toStream)
   }
 
+  "encode decode UTF16_BE" ! check {(chars: Array[Char]) =>
+    val t = new Text(chars)
+    val res = CL.sourceList[IO, ByteString](Stream(encodeUtf16Be(t))) %= CText.decode[IO](Utf16_be) %%== CL.consume[IO, Text]
+    LText.fromChunks(res.unsafePerformIO).unpack must be_==(t.toStream)
+  }
+
   "ctext lines" ! check { (s: String) =>
     val actual = sourceList[Id, Text](Stream(new Text(s.toCharArray))) %%== CText.lines[Id] =% consume
     val expected = s.lines.map(Text.pack).toStream

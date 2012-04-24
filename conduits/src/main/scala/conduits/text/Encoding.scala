@@ -30,11 +30,17 @@ object Encoding {
   def encodeUtf16Le(t: Text): ByteString =
     encode(t, UTF16LE.newEncoder)
 
+  def encodeUtf16Be(t: Text): ByteString =
+    encode(t, UTF16BE.newEncoder)
+
   def decodeUtf8(bs: ByteString): Text =
     decode(bs, UTF8.newDecoder)
 
   def decodeUtf16Le(bs: ByteString): Text =
     decode(bs, UTF16LE.newDecoder)
+
+  def decodeUtf16Be(bs: ByteString): Text =
+    decode(bs, UTF16BE.newDecoder)
 
   def decode(bs: ByteString, decoder: CharsetDecoder): Text =
     Text.fromCharBuffer(decoder.decode(bs.toByteBuffer))

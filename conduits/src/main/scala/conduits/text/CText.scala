@@ -192,6 +192,39 @@ object Utf16_le extends Codec {
   }
 }
 
+object Utf16_be extends Codec {
+  def codecName = Text.pack("UTF-16BE")
+
+  def codecEncode(t: Text) = (Encoding.encodeUtf16Be(t), lazyNone)
+
+  def codecDecode(bytes: ByteString) = {
+    val maxN = bytes.length
+    def decodeAll = (Encoding.decodeUtf16Be(bytes), ByteString.empty)
+    def decodeTo(n: Int) = {
+      val (bs1, bs2) = bytes.splitAt(n)
+      (Encoding.decodeUtf16Be(bs1), bs2)
+    }
+    def loop(n: Int): (Text, ByteString) = {
+      if (n == maxN) decodeAll
+      else if (n + 1 == maxN) decodeTo(n)
+      else {
+        val req = utf16Required(bytes(n+1), bytes(n))
+        def decodeMore: (Text, ByteString) = {
+          if ((n + req) > maxN) decodeTo(n)
+          else loop(n + req)
+        }
+        decodeMore
+      }
+    }
+    def splitQuickly(bs: ByteString): LazyOption[(Text, ByteString)] = {
+      val (f, s) = loop(0)
+      maybeDecode[Text, ByteString](f, s)
+    }
+
+    splitQuickly(bytes).fold(te => (te._1, Right(te._2)), splitSlowly(Encoding.decodeUtf16Be, bytes))
+  }
+}
+
 object Ascii extends Codec {
 
   def codecName = Text.pack("ASCII")

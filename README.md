@@ -18,16 +18,16 @@ knowing that they will always be reclaimed- even in the presence of exceptions.
 
 ### Core classes
 
-* Source
+* **Source.**
 A producer of data. The data could be in a file, coming from a socket, or in memory as a list.
 To access this data, we pull from the source.
 
-* Sink
+* **Sink.**
 A consumer of data. Basic examples would be a sum function (adding up a stream of numbers fed in),
 a file sink (which writes all incoming bytes to a file), or a socket.
 We push data into a sink. When the sink finishes processing it returns some value.
 
-* Conduit
+* **Conduit.**
 A transformer of data. The simplest example is a map function.
 Like a sink, we push data into a conduit, but instead of returning a single value at the end,
 a conduit can return multiple outputs every time it is pushed to.

@@ -35,11 +35,11 @@ class CTextSpec extends Specification with ScalaCheck {
     LText.fromChunks(res.unsafePerformIO).unpack must be_==(t.toStream)
   }
 
-//  "ctext lines" ! check { (s: String) =>
-//    val actual = sourceList[Id, Text](Stream(new Text(s.toCharArray))) %%== CText.lines[Id] =% consume
-//    val expected = s.lines.map(Text.pack).toStream
-//    actual must be_== (expected)
-//  }
+  "ctext lines" ! check { (s: String) =>
+    val actual = sourceList[Id, Text](Stream(new Text(s.toCharArray))) %%== CText.lines[Id] =% consume
+    val expected = s.lines.map(Text.pack).toStream
+    actual must be_== (expected)
+  }
 
   "CText text" should {
     "simple string in single chunk" in {
@@ -65,8 +65,9 @@ class CTextSpec extends Specification with ScalaCheck {
     "is lazy" in {
       val t = Text.pack("abcdefg")
       val bs = Encoding.encodeUtf8(t)
-      val actual: IO[Option[Text]] = sourceList[IO, ByteString](Stream(bs, sys.error("ignore"))) %%== CText.decode[IO](Utf8) =% CL.head[IO, Text]
-      actual.unsafePerformIO must be_==(Some("abcdefg"))
+      def from(bs: => ByteString, bs2: => ByteString): Stream[ByteString] = Stream.cons(bs, from(bs, bs2))
+      val actual: IO[Option[Text]] = sourceList[IO, ByteString](from(bs, sys.error("ignore"))) %%== CText.decode[IO](Utf8) =% CL.head[IO, Text]
+      actual.unsafePerformIO.map(_.toString) must be_==(Some("abcdefg"))
     }
   }
   "split lines" should {

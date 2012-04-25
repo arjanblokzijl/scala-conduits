@@ -11,7 +11,7 @@ object CLBenchmark extends MyRunner { val cls = classOf[CLBenchmark] }
 
 class CLBenchmark extends CBenchmark with BenchmarkData {
 
-  def foldListDirect(data:Stream[Int]):Int = {
+  def foldStreamDirect(data:Stream[Int]):Int = {
     var total = 0
     total = data.foldLeft(0)(_+_)
     total
@@ -23,6 +23,6 @@ class CLBenchmark extends CBenchmark with BenchmarkData {
     total
   }
 
-  def timeFoldStreamDirect(reps:Int) = run(reps)(foldListDirect(intStream))
-  def timeConduitFoldStream(reps:Int) = run(reps)(foldListDirect(intStream))
+  def timeFoldStreamDirect(reps:Int) = run(reps)(foldStreamDirect(intStream))
+//  def timeConduitFoldStream(reps:Int) = run(reps)(conduitFoldList(intStream)) //gives SOE, so work to be done...
 }

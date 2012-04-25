@@ -39,7 +39,7 @@ trait BenchmarkData extends CBenchmark {
   //val size = 200 * 1000
   //val size = 1 * 1000 * 1000
   //val size = 4 * 1000 * 1000
-  val size = 1 * 100
+  val size = 100 * 1000
 
   lazy val intArr = init(size)(nextInt)
   lazy val intSeq = (10 to size).toList

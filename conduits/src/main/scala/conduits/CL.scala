@@ -24,9 +24,12 @@ object CL {
    * @return the result of applying the binary operation to all elements of the stream plus the starting value.
    */
   def foldLeft[F[_], A, B](z: => B)(f: (B, A) => B)(implicit M: Monad[F]): Sink[A, F, B] = {
-    def push: B => (=> A) => F[SinkStateResult[B, A, B]] = acc => input => M.point(StateProcessing(f(acc, input)))
-    def close: B => F[B] = acc => M.point(acc)
-    sinkState[B, A, F, B](z, push, close)
+    def push1(acc: => B)(input: A): Sink[A, F, B] = {
+      val acc1 = f(acc, input)
+      go(acc1)
+    }
+    def go(accum: => B): Sink[A, F, B] = NeedInput(push1(accum), pipeMonad[A, Void, F].point(accum))
+    go(z)
   }
 
   /**
@@ -102,13 +105,13 @@ object CL {
     NeedInput(push, close)
   }
 
-  def sourceList[F[_], A](l: => Stream[A])(implicit M: Monad[F]): Source[F, A] = {
-    def go(l1: => Stream[A]): F[SourceStateResult[Stream[A], A]] = l1 match {
-      case Stream.Empty => M.point(StateClosed.apply)
-      case x #:: xs =>  M.point(StateOpen(xs, x))
-    }
-    sourceState[Stream[A], F, A](l, (s: Stream[A]) => go(s))
-  }
+  def sourceList[F[_], A](l: => Stream[A])(implicit M: Monad[F]): Source[F, A] = yieldMany(l)
+//    def go(l1: => Stream[A]): F[SourceStateResult[Stream[A], A]] = l1 match {
+//      case Stream.Empty => M.point(StateClosed.apply)
+//      case x #:: xs =>  M.point(StateOpen(xs, x))
+//    }
+//    sourceState[Stream[A], F, A](l, (s: Stream[A]) => go(s))
+//  }
 
   /**
    * Apply a transformation to all values in a stream.

@@ -79,6 +79,12 @@ class ConduitSpec extends Specification with ScalaCheck {
       (sourceList[Id, Int](s) %%== zipSinks(consume[Id, Int], consume[Id, Int])) must be_==(s, s)
   }
 
+  "middle fusion" ! check {
+    (s: Stream[Int]) =>
+      val res = (sourceList[Id, Int](s) %= CL.map[Id, Int, Int](i => i + 1) =%= CL.map(i => i - 2) &= CL.consume[Id, Int])
+      res must be_==(s.map(i => i - 1))
+  }
+
   "conduits" should {
     "head removes the first element from the inputstream" in {
       val s = Stream.from(0).take(5)

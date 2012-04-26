@@ -24,5 +24,5 @@ class CLBenchmark extends CBenchmark with BenchmarkData {
   }
 
   def timeFoldStreamDirect(reps:Int) = run(reps)(foldStreamDirect(intStream))
-//  def timeConduitFoldStream(reps:Int) = run(reps)(conduitFoldList(intStream)) //gives SOE, so work to be done...
+  def timeConduitFoldStream(reps:Int) = run(reps)(conduitFoldList(intStream))
 }

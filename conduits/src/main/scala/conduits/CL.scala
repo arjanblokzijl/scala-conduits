@@ -106,12 +106,6 @@ object CL {
   }
 
   def sourceList[F[_], A](l: => Stream[A])(implicit M: Monad[F]): Source[F, A] = yieldMany(l)
-//    def go(l1: => Stream[A]): F[SourceStateResult[Stream[A], A]] = l1 match {
-//      case Stream.Empty => M.point(StateClosed.apply)
-//      case x #:: xs =>  M.point(StateOpen(xs, x))
-//    }
-//    sourceState[Stream[A], F, A](l, (s: Stream[A]) => go(s))
-//  }
 
   /**
    * Apply a transformation to all values in a stream.

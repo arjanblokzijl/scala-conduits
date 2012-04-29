@@ -7,8 +7,6 @@ import IO._
 import java.io.{FileInputStream, File}
 import java.nio.channels.ByteChannel
 import scalaz.{Show, Order, Monoid}
-import collection.mutable.Builder
-import collection.IndexedSeqOptimized
 
 /**
  * A minimalistic version of a lazy ByteString.
@@ -218,7 +216,3 @@ trait LByteStringInstances {
     override def equalIsNatural: Boolean = true
   }
 }
-
-//final class LByteStringBuilder extends scala.collection.mutable.LazyBuilder[Byte, LByteString] {
-//  def result() = pack(parts.toStream.flatMap(_ toStream))
-//}

@@ -103,9 +103,6 @@ object LText extends LTextFunctions with LTextInstances {
 
   object Empty {
     def apply = new LText {
-
-      def fold[Z](empty: => Z, chunk: (Text, Chunked[Char, Text]) => Z) = null
-
       def fold[Z](empty: => Z, chunk: (=> Text, => LText) => Z): Z = empty
     }
     def unapply(lt: LText): Boolean = lt.fold(true, (_, _) => false)

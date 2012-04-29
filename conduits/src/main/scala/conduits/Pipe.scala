@@ -259,6 +259,41 @@ trait PipeFunctions {
     go(p1, p2).run
   }
 
+  def pipeRes[A, B, C, F[_], R](p1: => Pipe[A, B, F, Unit], p2: => Pipe[B, C, F, R])(implicit F: Monad[F]): Pipe[A, C, F, (Pipe[A, B, F, Unit], R)] = {
+      (p1, p2) match {
+        //both pipes finished, return leftover of left pipe and leftovers of right pipe in the result.
+        case (Done(leftoverl, ()), Done(leftoverr, r)) => leftoverr match {
+          case None => Done(leftoverl, (pipes.pipeMonad[A, B, F].point(()), r))
+          case Some(i) => Done(leftoverl, (HaveOutput(Done(None, ()), F.point(()), i), r))
+        }
+        //right pipe is done, terminate and return leftovers.
+        case (left, Done(leftoverr, r)) => leftoverr match {
+          case None => Done(None, (left, r))
+          case Some(i) => Done(None, (HaveOutput(left, left.pipeClose, i), r))
+        }
+        //left pipe needs input, ask for it
+        case (NeedInput(p, c), right) => NeedInput(a => pipeResume(p(a), right)
+          , pipeResume(c, right).flatMap(pr => {
+            pipeMonadTrans.liftM(pr._1.pipeClose)
+            pipes.pipeMonad[A, C, F].point((pipes.pipeMonad[A, B, F].point(()), pr._2))
+          }))
+        //left pipe has output, right pipe wants it
+        case (HaveOutput(lp, _, a), NeedInput(rp, _)) => pipeRes(lp, rp(a))
+        //right pipe needs to run a monadic action
+        case (left, PipeM(mp, c)) => PipeM(F.map(mp)(p => pipeRes(left, p)), F.map(c)(r => (left, r)))
+        //right Pipe has some output, provide it downstream and continue.
+        case (left, HaveOutput(p, c, o)) => HaveOutput(pipeRes(left, p), F.map(c)(r => (left, r)), o)
+      //left pipe is Done, right pipe needs input. Tell the right pipe there is no more input
+        //eventually replace its leftovers with the left pipe leftover
+        case (Done(l, ()), NeedInput(_, c)) => replaceLeftOver(l, c).map(r => (pipes.pipeMonad[A, B, F].point(()), r))
+        //left pipe needs to run a monadic action
+        case (PipeM(mp, c), right) => PipeM(F.map(mp)(p => pipeResume(p, right))
+          , F.bind(c)(_ => F.map(right.pipeClose)(r => (pipes.pipeMonad[A, B, F].point(()), r)))
+        )
+      }
+    }
+
+
   private def replaceLeftOver[A, B, C, F[_], R](l: => Option[A], p1: => Pipe[C, B, F, R])(implicit F: Monad[F]): Pipe[A, B, F, R] = p1.fold(
     haveOutput = (p, c, o) => HaveOutput(replaceLeftOver(l, p), c, o)
     , needInput = (_, c) => replaceLeftOver(l, c)

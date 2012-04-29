@@ -5,6 +5,7 @@ import resourcet.resource
 import scalaz.std.stream._
 import scalaz._
 import collection.immutable.Stream
+import conduits.pipes._
 
 /**
 * List like operations for conduits.
@@ -64,20 +65,48 @@ object CL {
     NeedInput(a => Done(Some(a), Some(a)), pipeMonad[A, Void, F].point[Option[A]](None))
 
   /**
-   * Takes a number of values from the data stream and returns a the elements as a [[scala.collection.immutable.Stream]].
+   * takes the given number of elements of the Stream, and returns the elements in the given [[scalaz.Monoid]].
    */
-  def take[F[_], A](n: Int)(implicit M: Monad[F]): Sink[A, F, Stream[A]] = {
-    def app[A](l1: Stream[A], l2: => Stream[A]): Stream[A] = streamInstance.plus(l1, l2)
-    def go(count: Int, acc: Stream[A]) = NeedInput(push(count, acc), pipeMonad[A, Void, F].point(acc))
-    def push(count: Int, acc: Stream[A])(x: A): Sink[A, F, Stream[A]] = {
+  def takeM[F[_], M[_], A](n: Int)(implicit M: Monad[F], P: Pointed[M], MO: Monoid[M[A]]): Sink[A, F, M[A]] = {
+    def go(count: Int, acc: M[A]) = NeedInput(push(count, acc), pipeMonad[A, Void, F].point(acc))
+    def push(count: Int, acc: M[A])(x: A): Sink[A, F, M[A]] = {
        if (count <= 0) Done(Some(x), acc)
        else {
          val count1 = count - 1
-         if (count1 <= 0) Done(None, app(acc, Stream(x)))
-         else NeedInput(push(count1, app(acc, Stream(x))), pipeMonad[A, Void, F].point(app(acc, Stream(x))))
+         if (count1 <= 0) Done(None, MO.append(acc, P.point(x)))
+         else NeedInput(push(count1, MO.append(acc, P.point(x))),  pipeMonad[A, Void, F].point(MO.append(acc, P.point(x))))
        }
     }
-    go(n, Stream.empty[A])
+    go(n, MO.zero)
+  }
+
+  /**
+   * Calls `takeM` using the Identity Monad.
+   */
+  def take[M[_], A](n: Int)(implicit P: Pointed[M], MO: Monoid[M[A]]): Sink[A, Id, M[A]] = {
+    implicit val idM = Id.id
+    takeM(n)
+  }
+
+
+
+  /**
+   * Takes the elements from the stream and returns them in a [[scalaz.DList]].
+   * This function is exposed since it is slightly more efficient than the general `takeM`
+   * which needs to append to Monoids on each invocation, while this version can just append
+   * the given element to the DList, which is effectively an O(1) operation.
+   */
+  def takeDList[F[_], A](n: Int)(implicit M: Monad[F]): Sink[A, F, DList[A]] = {
+    def go(count: Int, acc: => DList[A]) = NeedInput(push(count, acc), pipeMonad[A, Void, F].point(acc))
+    def push(count: Int, acc: => DList[A])(x: A): Sink[A, F, DList[A]] =
+      if (count <= 0) Done(Some(x), acc)
+      else {
+        val count1 = count - 1
+        if (count1 <= 0) Done(None, acc :+ x)
+        else NeedInput(push(count1, acc :+ x), pipeMonad[A, Void, F].point(acc))
+      }
+
+    go(n, DList())
   }
 
   def drop[F[_], A](count: Int)(implicit M: Monad[F]): Sink[A, F, Unit] = {
@@ -89,6 +118,20 @@ object CL {
       case n if (n <= 0) => NeedInput(i => Done(Some(i), ()), pipeMonad[A, Void, F].point(()))
       case c => NeedInput(push, NeedInput(push, pipeMonad[A, Void, F].point(())))
     }
+  }
+
+  //TODO the most efficient, but dangerous to expose this?
+  private[conduits] def takeBuffer[F[_], A](n: Int)(implicit M: Monad[F]): Sink[A, F, Seq[A]] = {
+    def go(count: Int, acc: collection.mutable.ListBuffer[A]): Sink[A, F, Seq[A]] = NeedInput(push(count, acc), pipeMonad[A, Void, F].point(acc))
+    def push(count: Int, acc: collection.mutable.ListBuffer[A])(x: A): Sink[A, F, Seq[A]] = {
+       if (count <= 0) Done(Some(x), acc)
+       else {
+         val count1 = count - 1
+         if (count1 <= 0) Done(None, (acc += x))
+         else NeedInput(push(count1, acc += x), pipeMonad[A, Void, F].point(acc += x))
+       }
+    }
+    go(n, collection.mutable.ListBuffer[A]())
   }
 
   def consume[F[_], A](implicit M: Monad[F]): Sink[A, F, Stream[A]] = {
@@ -213,7 +256,7 @@ object CL {
     zipSinks1(scalaz.Ordering.EQ)(f1, f2)
 
   import Void._
-  def zipSinks1[F[_], A, B, C](by: scalaz.Ordering)(f1: Sink[A, F, B], f2: Sink[A, F, C])(implicit M: Monad[F]): Sink[A, F, (B, C)] = (f1, f2) match {
+  private def zipSinks1[F[_], A, B, C](by: scalaz.Ordering)(f1: Sink[A, F, B], f2: Sink[A, F, C])(implicit M: Monad[F]): Sink[A, F, (B, C)] = (f1, f2) match {
     case (PipeM(mpx, mx), py) => PipeM(M.map(mpx)(x => zipSinks1(by)(x, py)), M.map2(mx, py.pipeClose)((x, y) => (x, y)))
     case (px, PipeM(mpy, my)) => PipeM(M.map(mpy)(y => zipSinks1(by)(px, y)), M.map2(px.pipeClose, my)((x, y) => (x, y)))
     case (Done(ix, x), Done(iy, y)) => by match {

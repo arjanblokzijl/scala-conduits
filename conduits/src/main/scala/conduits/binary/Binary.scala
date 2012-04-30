@@ -101,9 +101,7 @@ object Binary {
     conduitState(count, push, close)
   }
 
-  /**
-   * Return all bytes while the given predicate is true.
-   */
+  /**Return all bytes while the given predicate is true.*/
   def takeWhile[F[_]](p: Byte => Boolean)(implicit M: Monad[F]): Conduit[ByteString, F, ByteString] = {
     def close: Conduit[ByteString, F, ByteString] = pipes.pipeMonoid[ByteString, ByteString, F].zero
     def push(bs: ByteString): Conduit[ByteString, F, ByteString] = {
@@ -122,6 +120,7 @@ object Binary {
     NeedInput(push, close)
   }
 
+  /**Drop all bytes while the given predicate is true.*/
   def dropWhile[F[_]](p: Byte => Boolean)(implicit M: Monad[F]): Sink[ByteString, F, Unit] = {
     def close: Sink[ByteString, F, Unit] = pipes.pipeMonoid[ByteString, Void, F].zero
     def push(bs: ByteString): Sink[ByteString, F, Unit] = {
@@ -132,25 +131,24 @@ object Binary {
     NeedInput(push, close)
   }
 
+  /**Split a ByteString into lines, where Byte '10' represents the LF Byte.*/
   def lines[F[_]](implicit M: Monad[F]): Conduit[ByteString, F, ByteString] = {
     import scalaz.std.stream._
-    def add[A](l1: Stream[A], l2: => Stream[A]): Stream[A] = streamInstance.plus(l1, l2)
-    def push[S](front: => Stream[ByteString], bs: => ByteString): F[ConduitStateResult[Stream[ByteString], ByteString, ByteString]] = {
-      val (leftover, ls) = getLines(front, bs)
-      M.point(StateProducing(leftover, ls))
+    def push[S](sofar: ByteString => ByteString)(more: ByteString): Conduit[ByteString, F, ByteString] = {
+      val (first, second) = more.span(_ != 10.toByte)
+      second.uncons match {
+        case Some((_, second1)) => HaveOutput(push(identity)(second1), M.point(()), sofar(first))
+        case None => {
+          val rest = sofar(more)
+          NeedInput(push(rest.append _), close(rest))
+        }
+      }
     }
 
-    def close(front: => Stream[ByteString]): F[Stream[conduits.binary.ByteString]] =
-      if (front.isEmpty) M.point(Stream.Empty)
-      else M.point(front)
+    def close(rest: ByteString): Conduit[ByteString, F, ByteString] =
+      if (rest.isEmpty) Done(None, ())
+      else HaveOutput(Done(None, ()), M.point(()), rest)
 
-
-    def getLines(front: Stream[ByteString], bs: => ByteString): (Stream[ByteString], Stream[ByteString]) = {
-      val (x, y) = bs.span(_ != 10.toByte)
-      if (bs.isEmpty) (Stream.empty, front)
-      else if (y.isEmpty) (Stream.empty, add(front, Stream(x)))
-      else getLines(add(front, Stream(x)), y.drop(1))
-    }
-    conduitState(Stream.Empty, push, close)
+    NeedInput(push(identity), close(ByteString.empty))
   }
 }

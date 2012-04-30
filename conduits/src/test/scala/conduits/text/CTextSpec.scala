@@ -85,7 +85,7 @@ class CTextSpec extends Specification with ScalaCheck {
     }
     "split items" in {
       val s: String = "0123\n4\n5\n678\n9"
-      val texts = Stream(Text.pack("0123\n4"), Text.pack("5\n"), Text.pack("678\n9"))
+      val texts = Stream(Text.pack("0123\n4"), Text.pack("\n5\n"), Text.pack("678\n9"))
       val actual: Stream[Text] = sourceList[Id, Text](texts) %%== CText.lines[Id] =% consume
       val expected = s.lines.map(Text.pack).toStream
       actual must be_==(expected)
@@ -96,9 +96,5 @@ class CTextSpec extends Specification with ScalaCheck {
       actual must have length 1
       actual.head.toString must be_==("012345678")
     }
-
-//    it "is not too eager" $ do
-//        x <- CL.sourceList ["foobarbaz", error "ignore me"] C.$$ CT.decode CT.utf8 C.=$ CL.head
-//        x @?= Just "foobarbaz"
   }
 }

@@ -12,40 +12,39 @@ object CLBenchmark extends MyRunner { val cls = classOf[CLBenchmark] }
 
 class CLBenchmark extends CBenchmark with BenchmarkData {
 
-  def foldStreamDirect(data:Stream[Int]):Int = {
-    var total = 0
-    total = data.foldLeft(0)(_+_)
-    total
-  }
+   def foldStreamDirect(data:Stream[Int]): Int = {
+     var total = 0
+     total = data.foldLeft(0)(_+_)
+     total
+   }
 
+   def takeDListDirect(data:Stream[Int]): List[Int] = {
+     var total = List[Int]()
+     total = (CL.sourceList[Id, Int](data) %%== CL.takeDList(100000)).toList
+     total
+   }
 
-  def takeDListDirect(data:Stream[Int]): List[Int] = {
-    var total = List[Int]()
-    total = (CL.sourceList[Id, Int](data) %%== CL.takeDList(100000)).toList
-    total
-  }
+   def takeListBuffer(data:Stream[Int]): List[Int] = {
+     var total = List[Int]()
+     total = (CL.sourceList[Id, Int](data) %%== CL.takeBuffer(100000)).toList
+     total
+   }
 
-  def takeListBuffer(data:Stream[Int]): List[Int] = {
-    var total = List[Int]()
-    total = (CL.sourceList[Id, Int](data) %%== CL.takeBuffer(100000)).toList
-    total
-  }
+   def takeDListMonoid(data:Stream[Int]): List[Int] = {
+     var total = List[Int]()
+     total = (CL.sourceList[Id, Int](data) %%== CL.take[DList, Int](100000)).toList
+     total
+   }
 
-  def takeDListMonoid(data:Stream[Int]): List[Int] = {
-    var total = List[Int]()
-    total = (CL.sourceList[Id, Int](data) %%== CL.take[DList, Int](100000)).toList
-    total
-  }
+   def conduitFoldList(data:Stream[Int]):Int = {
+     var total = 0
+     total = CL.sourceList[Id, Int](data) %%== CL.sum[Id]
+     total
+   }
 
-  def conduitFoldList(data:Stream[Int]):Int = {
-    var total = 0
-    total = CL.sourceList[Id, Int](data) %%== CL.sum[Id]
-    total
-  }
-
-  def timeFoldStreamDirect(reps:Int) = run(reps)(foldStreamDirect(intStream))
-  def timeConduitFoldStream(reps:Int) = run(reps)(conduitFoldList(intStream))
-  def timeTakeDlistDirect(reps:Int) = run(reps)(takeDListDirect(intStream))
-  def timeTakeDlistMonoid(reps:Int) = run(reps)(takeDListMonoid(intStream))
-  def timeTakeListBufferMonoid(reps:Int) = run(reps)(takeListBuffer(intStream))
+   def timeFoldStreamDirect(reps:Int) = run(reps)(foldStreamDirect(intStream))
+   def timeConduitFoldStream(reps:Int) = run(reps)(conduitFoldList(intStream))
+   def timeTakeDlistDirect(reps:Int) = run(reps)(takeDListDirect(intStream))
+   def timeTakeDlistMonoid(reps:Int) = run(reps)(takeDListMonoid(intStream))
+   def timeTakeListBufferMonoid(reps:Int) = run(reps)(takeListBuffer(intStream))
 }

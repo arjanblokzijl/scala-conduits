@@ -30,7 +30,7 @@ final class ByteString(bytes: Array[Byte]) extends IndexedSeq[Byte] with Indexed
 
   def length = arr.length
 
-  def append(that: => ByteString): ByteString = new ByteString(arr ++ that.toArray)
+  def append(that: ByteString): ByteString = new ByteString(arr ++ that.toArray)
 
   def toByteBuffer: ByteBuffer = ByteBuffer.wrap(toArray).asReadOnlyBuffer
 

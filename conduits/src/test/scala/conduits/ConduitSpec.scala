@@ -37,6 +37,11 @@ class ConduitSpec extends Specification with ScalaCheck {
     (stream: Stream[Int]) =>
       (sourceList[Id, Int](stream) %%== consume)  must be_===(stream)
   }
+  "consume all elements using DList" ! check {
+    (stream: Stream[Int]) =>
+      val res = sourceList[Id, Int](stream) %%== consumeDlist
+      res.toList must be_==(stream.toList)
+  }
 
   "filter" ! check {(stream: Stream[Int]) =>
     (sourceList[Id, Int](stream) %%== (filter[Id, Int](i => i % 2 == 0) =% consume))  must be_===(stream.filter(i => i % 2 == 0))

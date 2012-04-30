@@ -19,6 +19,9 @@ import java.nio.CharBuffer
 final class Text(chars: Array[Char]) extends IndexedSeq[Char] with IndexedSeqOptimized[Char, Text] {
   private val arr = chars.clone
   override protected[this] def newBuilder: Builder[Char, Text] = ArrayBuilder.make[Char]().mapResult(new Text(_))
+
+  def uncons: Option[(Char, Text)] = if (isEmpty) None else Some(arr.head, new Text(arr.tail))
+
   def apply(idx: Int) = arr(idx)
 
   def length = arr.length
@@ -27,7 +30,7 @@ final class Text(chars: Array[Char]) extends IndexedSeq[Char] with IndexedSeqOpt
 
   def toCharBuffer: CharBuffer = CharBuffer.wrap(arr).asReadOnlyBuffer
 
-  def append(that: => Text): Text = new Text(arr ++ that.toArray)
+  def append(that: Text): Text = new Text(arr ++ that.toArray)
 
   def unpack: String = new String(arr)
 

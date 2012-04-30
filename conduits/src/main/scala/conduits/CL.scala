@@ -88,8 +88,6 @@ object CL {
     takeM(n)
   }
 
-
-
   /**
    * Takes the elements from the stream and returns them in a [[scalaz.DList]].
    * This function is exposed since it is slightly more efficient than the general `takeM`
@@ -109,16 +107,6 @@ object CL {
     go(n, DList())
   }
 
-  def drop[F[_], A](count: Int)(implicit M: Monad[F]): Sink[A, F, Unit] = {
-    def push(i: A): Sink[A, F, Unit] = (count - 1) match {
-      case 0 => Done(None, ())
-      case n => drop(n)
-    }
-    count match {
-      case n if (n <= 0) => NeedInput(i => Done(Some(i), ()), pipeMonad[A, Void, F].point(()))
-      case c => NeedInput(push, NeedInput(push, pipeMonad[A, Void, F].point(())))
-    }
-  }
 
   //TODO the most efficient, but dangerous to expose this?
   private[conduits] def takeBuffer[F[_], A](n: Int)(implicit M: Monad[F]): Sink[A, F, Seq[A]] = {
@@ -132,6 +120,23 @@ object CL {
        }
     }
     go(n, collection.mutable.ListBuffer[A]())
+  }
+
+  def drop[F[_], A](count: Int)(implicit M: Monad[F]): Sink[A, F, Unit] = {
+    def push(i: A): Sink[A, F, Unit] = (count - 1) match {
+      case 0 => Done(None, ())
+      case n => drop(n)
+    }
+    count match {
+      case n if (n <= 0) => NeedInput(i => Done(Some(i), ()), pipeMonad[A, Void, F].point(()))
+      case c => NeedInput(push, NeedInput(push, pipeMonad[A, Void, F].point(())))
+    }
+  }
+
+  def consumeDlist[F[_], A](implicit M: Monad[F]): Sink[A, F, DList[A]] = {
+    def go(acc: DList[A]): Sink[A, F, DList[A]] = NeedInput(push(acc), pipeMonad[A, Void, F].point(acc))
+    def push(acc: DList[A])(x: A): Sink[A, F, DList[A]] = go(acc :+ x)
+    go(DList())
   }
 
   def consume[F[_], A](implicit M: Monad[F]): Sink[A, F, Stream[A]] = {

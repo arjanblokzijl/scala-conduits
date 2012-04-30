@@ -64,28 +64,24 @@ object CText {
     NeedInput(push, close(ByteString.empty))
   }
 
-  /**
-   * Split the given Text into lines.
-   */
+  /**Split the given Text into lines.*/
   def lines[F[_]](implicit M: Monad[F]): Conduit[Text, F, Text] = {
-    import scalaz.std.stream._
-    def add[A](l1: Stream[A], l2: => Stream[A]): Stream[A] = streamInstance.plus(l1, l2)
-    def push[S](front: => Stream[Text], bs: => Text): F[ConduitStateResult[Stream[Text], Text, Text]] = {
-      val (leftover, ls) = getLines(front, bs)
-      M.point(StateProducing(leftover, ls))
+    def push[S](sofar: Text => Text)(more: Text): Conduit[Text, F, Text] = {
+      val (first, second) = more.span(_ != '\n')
+      second.uncons match {
+        case Some((_, second1)) => HaveOutput(push(identity)(second1), M.point(()), sofar(first))
+        case None => {
+          val rest = sofar(more)
+          NeedInput(push(rest.append _), close(rest))
+        }
+      }
     }
 
-    def close(front: => Stream[Text]): F[Stream[Text]] =
-      if (front.isEmpty) M.point(Stream.Empty)
-      else M.point(front)
+    def close(rest: Text): Conduit[Text, F, Text] =
+      if (rest.isEmpty) Done(None, ())
+      else HaveOutput(Done(None, ()), M.point(()), rest)
 
-    def getLines(front: Stream[Text], bs: => Text): (Stream[Text], Stream[Text]) = {
-      val (x, y) = bs.span(_ != '\n')
-      if (bs.isEmpty) (Stream.empty, front)
-      else if (y.isEmpty) (Stream.empty, add(front, Stream(x)))
-      else getLines(add(front, Stream(x)), y.drop(1))
-    }
-    conduitState(Stream.Empty, push, close)
+    NeedInput(push(identity), close(Text.empty))
   }
 }
 

@@ -56,7 +56,7 @@ object ScalaConduitsBuild extends Build {
   val key = AttributeKey[Boolean]("javaOptionsPatched")
 
   lazy val benchmarkSettings = standardSettings ++ Seq(
-    javaOptions in run += "-Xmx4G",
+    javaOptions in run += "-Xmx2G",
 
     libraryDependencies ++= Seq(
       "com.google.guava" % "guava" % "r09",

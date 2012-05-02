@@ -6,7 +6,12 @@ import com.google.caliper.SimpleBenchmark
 import com.google.caliper.Param
 import scala.util.Random
 import Random._
-
+import pipes._
+import ConduitFunctions._
+import CL._
+import Conduits._
+import scalaz._
+import DList._
 
 trait CBenchmark extends SimpleBenchmark {
   /**
@@ -45,4 +50,5 @@ trait BenchmarkData extends CBenchmark {
   lazy val byteArr: Array[Byte] = init[Byte](size)(nextInt.toByte)
   lazy val intSeq = (10 to size).toList
   lazy val intStream = Stream.from(0).take(size)
+  lazy val intSource = CL.sourceList[Id, Int](Stream.from(0).take(size))
 }

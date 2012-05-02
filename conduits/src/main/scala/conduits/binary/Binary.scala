@@ -13,6 +13,7 @@ import resourcet.{ReleaseKey, MonadResource}
 import scalaz.Monad
 import binary.{ByteString => B}
 import empty.Void
+import Finalize._
 
 /**
  * User: arjan
@@ -37,7 +38,7 @@ object Binary {
     def pullUnlimited(c: FileChannel, key: ReleaseKey): F[Source[F, ByteString]] =
       MR.MO.bind(MR.MO.liftIO(ByteString.getContents(c)))(bs =>
         if (bs.isEmpty) M.map(MR.release(key))(_ => Done(None, ()))
-        else M.point(HaveOutput(PipeM(pullUnlimited(c, key), MR.release(key)), MR.release(key), bs))
+        else M.point(HaveOutput(PipeM(pullUnlimited(c, key), FinalizeM(MR.release(key))), FinalizeM(MR.release(key)), bs))
       )
 
     def pullLimited(i: Int, fc: FileChannel, key: ReleaseKey): F[Source[F, ByteString]] = {
@@ -45,7 +46,7 @@ object Binary {
       MR.MO.bind(MR.MO.liftIO(B.getContents(fc, c)))(bs => {
         val c1 = c - bs.length
         if (bs.isEmpty) M.map(MR.release(key))(_ => Done(None, ()))
-        else M.point(HaveOutput(PipeM(pullLimited(c1, fc, key), MR.release(key)), MR.release(key), bs))
+        else M.point(HaveOutput(PipeM(pullLimited(c1, fc, key),  FinalizeM(MR.release(key))), FinalizeM(MR.release(key)), bs))
       })
     }
 
@@ -54,7 +55,7 @@ object Binary {
       val chan = kh._2
       M.bind(offset.map(off => M.liftIO(IO(kh._2.position(off)))) getOrElse M.point(()))(_ =>
         count.map(o => pullLimited(o, chan, key)) getOrElse pullUnlimited(chan, key))
-    }), M.point(()))
+    }), FinalizePure(()))
   }
 
   def sinkFile[F[_]](f: File)(implicit MR: MonadResource[F]): Sink[ByteString, F, Unit] =
@@ -109,12 +110,12 @@ object Binary {
       if (bs.isEmpty) {
         val r = NeedInput(push, close)
         if (x.isEmpty) r
-        else HaveOutput(r, M.point(()), x)
+        else HaveOutput(r, FinalizePure(()), x)
       }
       else {
         val f = Done[ByteString, ByteString, F, Unit](Some(y), ())
         if (x.isEmpty) f
-        else HaveOutput(f, M.point(()), x)
+        else HaveOutput(f, FinalizePure(()), x)
       }
     }
     NeedInput(push, close)
@@ -137,7 +138,7 @@ object Binary {
     def push[S](sofar: ByteString => ByteString)(more: ByteString): Conduit[ByteString, F, ByteString] = {
       val (first, second) = more.span(_ != 10.toByte)
       second.uncons match {
-        case Some((_, second1)) => HaveOutput(push(identity)(second1), M.point(()), sofar(first))
+        case Some((_, second1)) => HaveOutput(push(identity)(second1), FinalizePure(()), sofar(first))
         case None => {
           val rest = sofar(more)
           NeedInput(push(rest.append _), close(rest))
@@ -147,7 +148,7 @@ object Binary {
 
     def close(rest: ByteString): Conduit[ByteString, F, ByteString] =
       if (rest.isEmpty) Done(None, ())
-      else HaveOutput(Done(None, ()), M.point(()), rest)
+      else HaveOutput(Done(None, ()), FinalizePure(()), rest)
 
     NeedInput(push(identity), close(ByteString.empty))
   }

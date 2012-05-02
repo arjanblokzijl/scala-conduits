@@ -14,6 +14,7 @@ import ConduitFunctions._
 import binary.{Char8, ByteString}
 import java.nio.charset.{CharsetDecoder, UnmappableCharacterException}
 import CTextFunctions._
+import Finalize._
 
 object CText {
 
@@ -39,7 +40,7 @@ object CText {
     def push(bs: ByteString): Conduit[ByteString, F, Text] = {
       val (text, extra) = codec.codecDecode(bs)
       extra match {
-        case Left((exc, _)) => PipeM(MT.monadThrow(exc), MT.monadThrow(exc))
+        case Left((exc, _)) => PipeM(MT.monadThrow(exc), finalizeMonadThrow[F].monadThrow[Unit](exc))
         case Right(bs1) => {
           def app(bs2: ByteString): ByteString = bs1 append(bs2)
           def close1 = close(bs1)
@@ -53,12 +54,12 @@ object CText {
       case None => Done(None, ())
       case Some((w, _)) => {
         val exc: F[pipes.Conduit[ByteString, F, Text]] = MT.monadThrow[Conduit[ByteString, F, Text]](DecodeException(codec, w))
-        PipeM(exc, M.map(exc)(_ => ()))
+        PipeM(exc, finalizeMonadTrans.liftM(exc).map(_ => ()))
       }
     }
-    def close2(bs: ByteString): F[Unit] = bs.uncons match {
-      case None => M.point(())
-      case Some((w, _)) => MT.monadThrow[Unit](DecodeException(codec, w))
+    def close2(bs: ByteString): Finalize[F, Unit] = bs.uncons match {
+      case None => FinalizePure(())
+      case Some((w, _)) => finalizeMonadThrow[F].monadThrow[Unit](DecodeException(codec, w))
     }
 
     NeedInput(push, close(ByteString.empty))
@@ -69,7 +70,7 @@ object CText {
     def push[S](sofar: Text => Text)(more: Text): Conduit[Text, F, Text] = {
       val (first, second) = more.span(_ != '\n')
       second.uncons match {
-        case Some((_, second1)) => HaveOutput(push(identity)(second1), M.point(()), sofar(first))
+        case Some((_, second1)) => HaveOutput(push(identity)(second1), FinalizePure(()), sofar(first))
         case None => {
           val rest = sofar(more)
           NeedInput(push(rest.append _), close(rest))
@@ -79,7 +80,7 @@ object CText {
 
     def close(rest: Text): Conduit[Text, F, Text] =
       if (rest.isEmpty) Done(None, ())
-      else HaveOutput(Done(None, ()), M.point(()), rest)
+      else HaveOutput(Done(None, ()), FinalizePure(()), rest)
 
     NeedInput(push(identity), close(Text.empty))
   }

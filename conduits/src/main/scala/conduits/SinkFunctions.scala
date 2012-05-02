@@ -6,6 +6,7 @@ import resourcet.{ReleaseKey, MonadResource, resource}
 import scalaz.{Forall, Monad}
 import pipes._
 import Pipe._
+import Finalize._
 
 /**
 * User: arjan
@@ -67,7 +68,7 @@ object SinkFunctions {
       M.bind(push(state1)(input))((res: SinkStateResult[S, I, A]) =>
          res.fold(done = (i, a) => M.point(Done(i, a)),
          processing = s => M.point(NeedInput[I, Void, F, A](push1(s), close1(s)))))
-      , close(state)
+      , FinalizeM(close(state))
       )
 
     def close1(s: S): Pipe[I, Void, F, A] = pipeMonadTrans.liftM(close(s))
@@ -82,7 +83,7 @@ object SinkFunctions {
         done = (a, b) => M.bind(M0.release(key))(_ => M.point(Done(a, b))),
         processing = M.point(NeedInput(i => {
           val mpipe = push1(key)(state)(i)
-          PipeM(mpipe, M.bind(mpipe)(p => p.pipeClose))},
+          PipeM(mpipe, finalizeMonadTrans.liftM(mpipe).flatMap(p => p.pipeClose))},
           pipeMonadTrans.liftM(close1(key)(state))))))
     }
 
@@ -92,7 +93,7 @@ object SinkFunctions {
 
     NeedInput(input =>
       PipeM(M.bind(M0.allocate(alloc, cleanup))(ks => push1(ks._1)(ks._2)(input))
-           , M.bind(M0.allocate(alloc, cleanup))(ks => close1(ks._1)(ks._2)))
+           , FinalizeM(M.bind(M0.allocate(alloc, cleanup))(ks => close1(ks._1)(ks._2))))
            , pipeMonadTrans.liftM(M0.allocate(alloc, cleanup)).flatMap((a) => pipeMonadTrans.liftM(close1(a._1)(a._2)))
       )
   }

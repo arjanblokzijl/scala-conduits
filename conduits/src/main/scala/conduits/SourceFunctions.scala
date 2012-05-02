@@ -7,6 +7,7 @@ import resourcet.{ReleaseKey, MonadResource}
 
 import pipes._
 import Pipe._
+import Finalize._
 
 sealed trait SourceStateResult[S, A] {
   def fold[Z](open: (=> S, => A) => Z, closed: => Z): Z
@@ -62,7 +63,7 @@ object SourceFunctions {
     def pull1(state: => S): F[Source[F, A]] =
       M.bind(pull(state))(res => res.fold(open = (s, o) => M.point(HaveOutput(src(s), close, o)),
                                           closed = M.point(Done[Void, A, F, Unit](None, ()))))
-    def close = M.point(())
+    def close: Finalize[F, Unit] = FinalizePure(())
     def src(state1: => S): Pipe[Void, A, F, Unit] = PipeM(pull1(state1), close)
     src(state)
   }
@@ -70,28 +71,28 @@ object SourceFunctions {
   /**A combination of sourceState and sourceIO*/
   def sourceStateIO[S, F[_], A](alloc: => IO[S], cleanup: (S => IO[Unit]), pull: S => F[SourceStateResult[S, A]])(implicit M0: MonadResource[F]): Source[F, A] = {
     implicit val M = M0.MO
-    def src(key: => ReleaseKey, state: => S): Source[F, A] = PipeM(pull1(key)(state), M0.release(key))
+    def src(key: => ReleaseKey, state: => S): Source[F, A] = PipeM(pull1(key)(state), FinalizeM(M0.release(key)))
     def pull1(key: => ReleaseKey)(state: => S): F[Source[F, A]] = {
       M.bind(pull(state))(res => res.fold(
-         open = (s, o) => M.point(HaveOutput(src(key, s), M0.release(key), o))
+         open = (s, o) => M.point(HaveOutput(src(key, s), FinalizeM(M0.release(key)), o))
          , closed = M.bind(M0.release(key))(_ => M.point(Done(None, ())))))
     }
     PipeM(M.bind(M0.allocate(alloc, cleanup))(ks => pull1(ks._1)(ks._2))
-          , M.point(()))
+          , FinalizePure(()))
   }
 
 
   /**Constructs a 'Source' based on some IO actions for alloc/release.*/
   def sourceIO[F[_], A, S](alloc: IO[S], cleanup: S => IO[Unit], pull: S => F[SourceIOResult[A]])(implicit M0: MonadResource[F]): Source[F, A] = {
     implicit val M = M0.MO
-    def src(key: => ReleaseKey, state: => S): Source[F, A] = PipeM(pull1(key)(state), M0.release(key))
+    def src(key: => ReleaseKey, state: => S): Source[F, A] = PipeM(pull1(key)(state), FinalizeM(M0.release(key)))
     def pull1(key: => ReleaseKey)(state: => S): F[Source[F, A]] = {
       M.bind(pull(state))((res: SourceIOResult[A]) => res.fold(
-         ioOpen = b => M.point(HaveOutput(src(key, state), M0.release(key), b))
+         ioOpen = b => M.point(HaveOutput(src(key, state), FinalizeM(M0.release(key)), b))
          , ioClosed = M.bind(M0.release(key))(_ => M.point(Done(None, ())))))
     }
     PipeM(M.bind(M0.allocate(alloc, cleanup))(ks => pull1(ks._1)(ks._2)),
-           M.point(()))
+          FinalizePure(()))
   }
 
 }

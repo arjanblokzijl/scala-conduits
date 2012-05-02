@@ -6,6 +6,7 @@ import scalaz.std.stream._
 import scalaz._
 import collection.immutable.Stream
 import conduits.pipes._
+import Finalize._
 
 /**
 * List like operations for conduits.
@@ -25,10 +26,7 @@ object CL {
    * @return the result of applying the binary operation to all elements of the stream plus the starting value.
    */
   def foldLeft[F[_], A, B](z: => B)(f: (B, A) => B)(implicit M: Monad[F]): Sink[A, F, B] = {
-    def push1(acc: => B)(input: A): Sink[A, F, B] = {
-      val acc1 = f(acc, input)
-      go(acc1)
-    }
+    def push1(acc: B)(input: A): Sink[A, F, B] = go(f(acc, input))
     def go(accum: => B): Sink[A, F, B] = NeedInput(push1(accum), pipeMonad[A, Void, F].point(accum))
     go(z)
   }
@@ -40,7 +38,7 @@ object CL {
     def go(seed: => B): Source[F, A] = {
       f(seed) match {
         case None => Done(None, ())
-        case Some((a, seed1)) => HaveOutput(go(seed1), M.point(()), a)
+        case Some((a, seed1)) => HaveOutput(go(seed1), FinalizePure(()), a)
       }
     }
     go(b)
@@ -48,8 +46,8 @@ object CL {
 
   def enumFromTo[F[_], A](start: => A, stop: => A)(implicit M: Monad[F], O: scalaz.Order[A], EN: scalaz.Enum[A]): Source[F, A] = {
     def go(i: => A): Source[F, A] = {
-      if (O.greaterThanOrEqual(i, stop)) HaveOutput(Done(None, ()), M.point(()), i)
-      else HaveOutput(go(EN.succ(i)), M.point(()), i)
+      if (O.greaterThanOrEqual(i, stop)) HaveOutput(Done(None, ()), FinalizePure(()), i)
+      else HaveOutput(go(EN.succ(i)), FinalizePure(()), i)
     }
     go(start)
   }
@@ -108,7 +106,7 @@ object CL {
   }
 
 
-  //TODO the most efficient, but dangerous to expose this?
+  //TODO the most efficient, but dangerous to expose this
   private[conduits] def takeBuffer[F[_], A](n: Int)(implicit M: Monad[F]): Sink[A, F, Seq[A]] = {
     def go(count: Int, acc: collection.mutable.ListBuffer[A]): Sink[A, F, Seq[A]] = NeedInput(push(count, acc), pipeMonad[A, Void, F].point(acc))
     def push(count: Int, acc: collection.mutable.ListBuffer[A])(x: A): Sink[A, F, Seq[A]] = {
@@ -148,7 +146,7 @@ object CL {
   def filter[F[_], A](f: A => Boolean)(implicit M: Monad[F]): Conduit[A, F, A] = {
     def close = pipeMonoid[A, A, F].zero
     def push: A => Conduit[A, F, A] = i =>
-      if (f(i)) HaveOutput(NeedInput(push, close), M.point(()), i)
+      if (f(i)) HaveOutput(NeedInput(push, close), FinalizePure(()), i)
       else NeedInput(push, close)
     NeedInput(push, close)
   }
@@ -161,7 +159,7 @@ object CL {
   def map[F[_], A, B](f: A => B)(implicit M: Monad[F]): Conduit[A, F, B] = {
     def close = pipeMonoid[A, B, F].zero
     def push: A => Conduit[A, F, B] = i =>
-      HaveOutput(NeedInput(push, close), M.point(()), f(i))
+      HaveOutput(NeedInput(push, close), FinalizePure(()), f(i))
 
     NeedInput(push, close)
   }
@@ -172,7 +170,7 @@ object CL {
   def mapM[F[_], A, B](f: A => F[B])(implicit M: Monad[F]): Conduit[A, F, B] = {
     def close = pipeMonoid[A, B, F].zero
     def push: A => Conduit[A, F, B] = i =>
-      PipeM(M.map(f(i))(o => HaveOutput(NeedInput(push, close), M.point(()), o)), M.point(()))
+      PipeM(M.map(f(i))(o => HaveOutput(NeedInput(push, close), FinalizePure(()), o)), FinalizePure(()))
 
     NeedInput(push, close)
   }
@@ -183,7 +181,7 @@ object CL {
   def mapM_[F[_], A, B](f: A => F[B])(implicit M: Monad[F]): Sink[A, F, Unit] = {
     def close = pipeMonad[A, Void, F].point(())
     def push: A => Sink[A, F, Unit] = i =>
-      PipeM(M.map(f(i))(_ => NeedInput(push, close)), M.point(()))
+      PipeM(M.map(f(i))(_ => NeedInput(push, close)), FinalizePure(()))
 
     NeedInput(push, close)
   }
@@ -223,14 +221,14 @@ object CL {
 
   def zip[F[_], A, B](f1: Source[F, A], f2: Source[F, B])(implicit M: Monad[F]): Source[F, (A, B)] = (f1, f2) match {
     case (Done(_, ()), Done(_, ())) => Done(None, ())
-    case (Done(_, ()), HaveOutput(_, close, _)) => PipeM(M.bind(close)(_ => M.point(Done(None, ()))), close)
-    case (HaveOutput(_, close, _), Done(_, ())) => PipeM(M.bind(close)(_ => M.point(Done(None, ()))), close)
-    case (Done(_, ()), PipeM(_, close)) => PipeM(M.bind(close)(_ => M.point(Done(None, ()))), close)
-    case (PipeM(_, close), Done(_, ())) => PipeM(M.bind(close)(_ => M.point(Done(None, ()))), close)
-    case (PipeM(mx, closex), PipeM(my, closey)) => PipeM(M.map2(mx, my)((a, b) => zip(a, b)), M.bind(closex)(_ => closey))
-    case (PipeM(mx, closex), y@HaveOutput(_, closey, _)) => PipeM(M.map(mx)(x => zip(x, y)), M.bind(closex)(_ => closey))
-    case (x@HaveOutput(_, closex, _), PipeM(my, closey)) => PipeM(M.map(my)(y => zip(x, y)), M.bind(closex)(_ => closey))
-    case (HaveOutput(srcx, closex, x),HaveOutput(srcy, closey, y)) => HaveOutput(zip(srcx, srcy), M.bind(closex)(_ => closey), (x, y))
+    case (Done(_, ()), HaveOutput(_, close, _)) => PipeM(M.bind(runFinalize(close))(_ => M.point(Done(None, ()))), close)
+    case (HaveOutput(_, close, _), Done(_, ())) => PipeM(M.bind(runFinalize(close))(_ => M.point(Done(None, ()))), close)
+    case (Done(_, ()), PipeM(_, close)) => PipeM(M.bind(runFinalize(close))(_ => M.point(Done(None, ()))), close)
+    case (PipeM(_, close), Done(_, ())) => PipeM(M.bind(runFinalize(close))(_ => M.point(Done(None, ()))), close)
+    case (PipeM(mx, closex), PipeM(my, closey)) => PipeM(M.map2(mx, my)((a, b) => zip(a, b)), closex.flatMap(_ => closey))
+    case (PipeM(mx, closex), y@HaveOutput(_, closey, _)) => PipeM(M.map(mx)(x => zip(x, y)), closex.flatMap(_ => closey))
+    case (x@HaveOutput(_, closex, _), PipeM(my, closey)) => PipeM(M.map(my)(y => zip(x, y)), closex.flatMap(_ => closey))
+    case (HaveOutput(srcx, closex, x),HaveOutput(srcy, closey, y)) => HaveOutput(zip(srcx, srcy), closex.flatMap(_ => closey), (x, y))
     case _ => sys.error("")
   }
 
@@ -262,8 +260,8 @@ object CL {
 
   import Void._
   private def zipSinks1[F[_], A, B, C](by: scalaz.Ordering)(f1: Sink[A, F, B], f2: Sink[A, F, C])(implicit M: Monad[F]): Sink[A, F, (B, C)] = (f1, f2) match {
-    case (PipeM(mpx, mx), py) => PipeM(M.map(mpx)(x => zipSinks1(by)(x, py)), M.map2(mx, py.pipeClose)((x, y) => (x, y)))
-    case (px, PipeM(mpy, my)) => PipeM(M.map(mpy)(y => zipSinks1(by)(px, y)), M.map2(px.pipeClose, my)((x, y) => (x, y)))
+    case (PipeM(mpx, mx), py) => PipeM(M.map(mpx)(x => zipSinks1(by)(x, py)), finalizeMonad[F].map2(mx, py.pipeClose)((x, y) => (x, y)))
+    case (px, PipeM(mpy, my)) => PipeM(M.map(mpy)(y => zipSinks1(by)(px, y)), finalizeMonad[F].map2(px.pipeClose, my)((x, y) => (x, y)))
     case (Done(ix, x), Done(iy, y)) => by match {
       case scalaz.Ordering.EQ => Done(iy.flatMap(_ => iy), (x, y))
       case scalaz.Ordering.GT => Done(ix, (x, y))

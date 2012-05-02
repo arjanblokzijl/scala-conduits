@@ -5,6 +5,7 @@ import pipes._
 import Pipe._
 import scalaz.effect.IO
 import resourcet.{ReleaseKey, MonadResource}
+import Finalize._
 
 /**
 * User: arjan
@@ -82,9 +83,9 @@ object ConduitFunctions {
    */
   def conduitState[S, A, F[_], B](state: => S, push: (=> S, => A) => F[ConduitStateResult[S, A, B]], close: (=> S) => F[Stream[B]])(implicit M: Monad[F]): Conduit[A, F, B] = {
     def push1(s: => S)(input: A): Conduit[A, F, B] =
-      PipeM(M.map(push(s, input))(r => goRes(r)), M.point(()))
+      PipeM(M.map(push(s, input))(r => goRes(r)), FinalizePure(()))
 
-    def close1(s: S): Pipe[A, B, F, Unit] = PipeM(M.bind(close(s))(os => M.point(fromList(os))), M.point(()))
+    def close1(s: S): Pipe[A, B, F, Unit] = PipeM(M.bind(close(s))(os => M.point(fromList(os))), FinalizePure(()))
 
     def goRes(res: ConduitStateResult[S, A, B]): Conduit[A, F, B] = res.fold(
       finished = (leftover, output) => haveMore[A, F, B](Done(leftover, ()), M.point(()), output)
@@ -101,31 +102,31 @@ object ConduitFunctions {
         finished = (leftover, output) => M.bind(M0.release(key))(_ => M.point(haveMore(Done(leftover, ()), M.point(()), output)))
         ,
         producing = output => M.point(haveMore(
-          NeedInput(i => PipeM(push1(key, state, i), M0.release(key)), close1(key, state))
+          NeedInput(i => PipeM(push1(key, state, i), FinalizeM(M0.release(key))), close1(key, state))
           , M.bind(M0.release(key))(_ => M.point(()))
           , output
         ))))
     }
     def close1(key: ReleaseKey, state: S): Pipe[A, B, F, Unit] =
-      PipeM(M.bind(close(state))(output => M.bind(M0.release(key))(_ => M.point(fromList(output)))), M0.release(key))
+      PipeM(M.bind(close(state))(output => M.bind(M0.release(key))(_ => M.point(fromList(output)))), FinalizeM(M0.release(key)))
 
     NeedInput(input =>
               PipeM(M.bind(M0.allocate(alloc, cleanup))(ks =>
-                push1(ks._1, ks._2, input)), M.point(()))
+                push1(ks._1, ks._2, input)), FinalizePure(()))
               , PipeM(M.bind(M0.allocate(alloc, cleanup))(ks =>
                M.bind(close(ks._2))(os =>
-                 M.bind(M0.release(ks._1))(_ => M.point(fromList(os))))), M.point(())
+                 M.bind(M0.release(ks._1))(_ => M.point(fromList(os))))), FinalizePure(())
                ))
   }
 
   def haveMore[A, F[_], B](res: Conduit[A, F, B], close: F[Unit], bs: Stream[B])(implicit M: Monad[F]): Conduit[A, F, B] = bs match {
     case Stream.Empty => res
-    case x #:: xs => HaveOutput(haveMore(res, close, xs), close, x)
+    case x #:: xs => HaveOutput(haveMore(res, close, xs), FinalizeM(close), x)
   }
 
   def fromList[A, F[_], B](bs: Stream[B])(implicit M: Monad[F]): Pipe[A, B, F, Unit] = bs match {
     case Stream.Empty => Done(None, ())
-    case x #:: xs => HaveOutput[A, B, F, Unit](fromList(xs), M.point(()), x)
+    case x #:: xs => HaveOutput[A, B, F, Unit](fromList(xs), FinalizePure(()), x)
   }
 
   import SequencedSinkResponse._

@@ -6,6 +6,9 @@ import Pipe._
 import scalaz.{Forall, Monoid, MonadTrans, Monad}
 import scalaz.std.function._
 import scalaz.Free.{Trampoline, return_, suspend}
+import scalaz.effect._
+import javax.print.attribute.standard.Finishings
+import resourcet.MonadThrow
 
 /**
  * The underlying datatype for all the types in this package.  In has four
@@ -33,19 +36,19 @@ import scalaz.Free.{Trampoline, return_, suspend}
  * @tparam R The type of the monad's final result
  */
 sealed trait Pipe[A, B, F[_], R] {
-
-  def fold[Z](haveOutput: (=> Pipe[A, B, F, R], => F[R], => B) => Z
+  import Finalize._
+  def fold[Z](haveOutput: (=> Pipe[A, B, F, R], => Finalize[F, R], => B) => Z
               , needInput: (=> A => Pipe[A, B, F, R], => Pipe[A, B, F, R]) => Z
               , done: (=> Option[A], => R) => Z
-              , pipeM: (=> F[Pipe[A, B, F, R]], => F[R]) => Z): Z
+              , pipeM: (=> F[Pipe[A, B, F, R]], => Finalize[F, R]) => Z): Z
 
   /**
    * Perform any close actions available for the given Pipe.
    */
-  def pipeClose(implicit F: Monad[F]): F[R] = fold(
+  def pipeClose(implicit F: Monad[F]): Finalize[F, R] = fold(
     haveOutput = (_, c, _) => c
     , needInput = (_, p) => p.pipeClose
-    , done = (_, r) => F.point(r)
+    , done = (_, r) => FinalizePure(r)
     , pipeM = (_, c) => c
   )
 
@@ -60,29 +63,29 @@ sealed trait Pipe[A, B, F[_], R] {
 
   def flatMap[S](f: (R) => Pipe[A, B, F, S])(implicit F: Monad[F]): Pipe[A, B, F, S] = {
     def through(p: => Pipe[A, B, F, R]): Pipe[A, B, F, S] = p.fold(
-      haveOutput = (p, c, o) => HaveOutput(through(p), F.bind(c)(r => f(r) pipeClose), o)
+      haveOutput = (p, c, o) => HaveOutput(through(p), c.flatMap(r => f(r) pipeClose), o)
       , needInput = (p, c) => NeedInput(i => through(p.apply(i)), through(c))
       , done = (oi, x) => oi match {
           case Some(i) => f(x).pipePush(i)
           case None => f(x)
       }
-      , pipeM = (mp, c) => PipeM(F.map(mp)(p1 => through(p1)), F.bind(c)(r => f(r) pipeClose))
+      , pipeM = (mp, c) => PipeM(F.map(mp)(p1 => through(p1)), c.flatMap(r => f(r) pipeClose))
     )
     through(this)
   }
 
-  /**
-   * Transforms the Monad a Pipe lives in.
-   */
-  def transPipe[G[_]](f: Forall[({type λ[A] = F[A] => G[A]})#λ])(implicit M: Monad[F], G: Monad[G]): Pipe[A, B, G, R] = {
-    def go(pipe: Pipe[A, B, F, R]): Pipe[A, B, G, R] = pipe match {
-      case Done(a, b) => Done(a, b)
-      case NeedInput(p, c) => NeedInput[A, B, G, R](i => go(p(i)), go(c))
-      case HaveOutput(p, c, o) => HaveOutput[A, B, G, R](go(p), f.apply(c), o)
-      case PipeM(mp, c) => PipeM[A, B, G, R](f.apply(M.map(mp)(p => go(p))), f.apply(c))
-    }
-    go(this)
-  }
+//  /**
+//   * Transforms the Monad a Pipe lives in.
+//   */
+//  def transPipe[G[_]](f: Forall[({type λ[A] = F[A] => G[A]})#λ])(implicit M: Monad[F], G: Monad[G]): Pipe[A, B, G, R] = {
+//    def go(pipe: Pipe[A, B, F, R]): Pipe[A, B, G, R] = pipe match {
+//      case Done(a, b) => Done(a, b)
+//      case NeedInput(p, c) => NeedInput[A, B, G, R](i => go(p(i)), go(c))
+//      case HaveOutput(p, c, o) => HaveOutput[A, B, G, R](go(p), f.apply(c), o)
+//      case PipeM(mp, c) => PipeM[A, B, G, R](f.apply(M.map(mp)(p => go(p))), f.apply(c))
+//    }
+//    go(this)
+//  }
 
   def mapOutput[C](f: B => C)(implicit M: Monad[F]): Pipe[A, C, F, R] = {
     def go(pipe: Pipe[A, B, F, R]): Pipe[A, C, F, R] = pipe match {
@@ -101,32 +104,62 @@ sealed trait Pipe[A, B, F[_], R] {
    */
   def addCleanup(cleanup: Boolean => F[Unit])(implicit M: Monad[F]): Pipe[A, B, F, R] = {
     def go(pipe: Pipe[A, B, F, R]): Pipe[A, B, F, R] = pipe match {
-      case Done(leftover, r) => PipeM(M.map(cleanup(true))(_ => Done(leftover, r)), M.bind(cleanup(true))(_ => M.point(r)))
+      case Done(leftover, r) => PipeM(M.map(cleanup(true))(_ => Done(leftover, r)), finalizeMonadTrans.liftM(cleanup(true)).flatMap(_ => FinalizePure(r)))
       case NeedInput(p, c) => NeedInput[A, B, F, R](i => go(p(i)), go(c))
-      case HaveOutput(src, close, x) => HaveOutput[A, B, F, R](go(src), M.bind(cleanup(false))(_ => close), x)
-      case PipeM(msrc, close) => PipeM[A, B, F, R](M.map(msrc)(p => go(p)), M.bind(cleanup(false))(_ => close))
+      case HaveOutput(src, close, x) => HaveOutput[A, B, F, R](go(src), finalizeMonadTrans.liftM(cleanup(false)).flatMap(_ => close), x)
+      case PipeM(msrc, close) => PipeM[A, B, F, R](M.map(msrc)(p => go(p)), finalizeMonadTrans.liftM(cleanup(false)).flatMap(_ => close))
     }
     go(this)
   }
 }
 
-object Pipe {
+import FoldUtils._
+import Finalize._
+sealed trait Finalize[F[_], R] {
 
-  import FoldUtils._
+  def map[S](f: R => S)(implicit M: Monad[F]): Finalize[F, S] = flatMap(r => FinalizePure(f(r)))
+
+  def flatMap[S](f: R => Finalize[F, S])(implicit M: Monad[F]): Finalize[F, S] = this match {
+    case FinalizePure(r) => f(r)
+    case FinalizeM(fr) => FinalizeM(M.bind(fr)(r => f(r) match {
+      case FinalizePure(x) => M.point(x)
+      case FinalizeM(mx) => mx
+    }))
+  }
+
+  def fold[Z](res: R => Z, ff: F[R] => Z): Z
+}
+
+object Finalize extends FinalizeFunctions with FinalizeInstances {
+  object FinalizePure {
+    def apply[F[_], R](r: R): Finalize[F, R] = new Finalize[F, R] {
+      def fold[Z](res: R => Z, fr: F[R] => Z): Z = res(r)
+    }
+    def unapply[F[_], R](f: Finalize[F, R]): Option[R] = f.fold(Some(_), ToNone1)
+  }
+  object FinalizeM {
+    def apply[F[_], R](fr: F[R]): Finalize[F, R] = new Finalize[F, R] {
+      def fold[Z](res: R => Z, ff: F[R] => Z): Z = ff(fr)
+    }
+    def unapply[F[_], R](f: Finalize[F, R]): Option[F[R]] = f.fold(ToNone1, Some(_))
+  }
+}
+
+object Pipe {
 
   /**
    * Provide new output to be sent downstream. HaveOutput has three fields: the next
    * pipe to be used, an early-close function and the output value.
    */
   object HaveOutput {
-    def apply[A, B, F[_], R](p: => Pipe[A, B, F, R], r: => F[R], b: => B) = new Pipe[A, B, F, R] {
-      def fold[Z](haveOutput: (=> Pipe[A, B, F, R], => F[R], => B) => Z
+    def apply[A, B, F[_], R](p: => Pipe[A, B, F, R], r: => Finalize[F, R], b: => B): Pipe[A, B, F, R] = new Pipe[A, B, F, R] {
+      def fold[Z](haveOutput: (=> Pipe[A, B, F, R], => Finalize[F, R], => B) => Z
                   , needInput: (=> A => Pipe[A, B, F, R], => Pipe[A, B, F, R]) => Z
                   , done: (=> Option[A], => R) => Z
-                  , pipeM: (=> F[Pipe[A, B, F, R]], => F[R]) => Z): Z = haveOutput(p, r, b)
+                  , pipeM: (=> F[Pipe[A, B, F, R]], => Finalize[F, R]) => Z): Z = haveOutput(p, r, b)
     }
 
-    def unapply[A, B, F[_], R](p: Pipe[A, B, F, R]): Option[(Pipe[A, B, F, R], F[R], B)] =
+    def unapply[A, B, F[_], R](p: Pipe[A, B, F, R]): Option[(Pipe[A, B, F, R], Finalize[F, R], B)] =
       p.fold((p, r, b) => Some(p, r, b), ToNone2, ToNone2, ToNone2)
   }
 
@@ -137,11 +170,11 @@ object Pipe {
    * from upstream.
    */
   object NeedInput {
-    def apply[A, B, F[_], R](aw: => A => Pipe[A, B, F, R], p: => Pipe[A, B, F, R]) = new Pipe[A, B, F, R] {
-      def fold[Z](haveOutput: (=> Pipe[A, B, F, R], => F[R], => B) => Z
+    def apply[A, B, F[_], R](aw: => A => Pipe[A, B, F, R], p: => Pipe[A, B, F, R]): Pipe[A, B, F, R] = new Pipe[A, B, F, R] {
+      def fold[Z](haveOutput: (=> Pipe[A, B, F, R], => Finalize[F, R], => B) => Z
                   , needInput: (=> A => Pipe[A, B, F, R], => Pipe[A, B, F, R]) => Z
                   , done: (=> Option[A], => R) => Z
-                  , pipeM: (=> F[Pipe[A, B, F, R]], => F[R]) => Z): Z = needInput(aw, p)
+                  , pipeM: (=> F[Pipe[A, B, F, R]], => Finalize[F, R]) => Z): Z = needInput(aw, p)
     }
 
     def unapply[A, B, F[_], R](p: Pipe[A, B, F, R]): Option[(A => Pipe[A, B, F, R], Pipe[A, B, F, R])] =
@@ -153,11 +186,11 @@ object Pipe {
    * input value, and the second field provides the final result.
    */
   object Done {
-    def apply[A, B, F[_], R](i: => Option[A], r: => R) = new Pipe[A, B, F, R] {
-      def fold[Z](haveOutput: (=> Pipe[A, B, F, R], => F[R], => B) => Z
+    def apply[A, B, F[_], R](i: => Option[A], r: => R): Pipe[A, B, F, R] = new Pipe[A, B, F, R] {
+      def fold[Z](haveOutput: (=> Pipe[A, B, F, R], => Finalize[F, R], => B) => Z
                   , needInput: (=> A => Pipe[A, B, F, R], => Pipe[A, B, F, R]) => Z
                   , done: (=> Option[A], => R) => Z
-                  , pipeM: (=> F[Pipe[A, B, F, R]], => F[R]) => Z): Z = done(i, r)
+                  , pipeM: (=> F[Pipe[A, B, F, R]], => Finalize[F, R]) => Z): Z = done(i, r)
     }
 
     def unapply[A, B, F[_], R](p: Pipe[A, B, F, R]): Option[(Option[A], R)] =
@@ -169,14 +202,14 @@ object Pipe {
    * this action, and the second field provides an early cleanup function.
    */
   object PipeM {
-    def apply[A, B, F[_], R](pm: => F[Pipe[A, B, F, R]], fr: => F[R]) = new Pipe[A, B, F, R] {
-      def fold[Z](haveOutput: (=> Pipe[A, B, F, R], => F[R], => B) => Z
+    def apply[A, B, F[_], R](pm: => F[Pipe[A, B, F, R]], fr: => Finalize[F, R]): Pipe[A, B, F, R] = new Pipe[A, B, F, R] {
+      def fold[Z](haveOutput: (=> Pipe[A, B, F, R], => Finalize[F, R], => B) => Z
                   , needInput: (=> A => Pipe[A, B, F, R], => Pipe[A, B, F, R]) => Z
                   , done: (=> Option[A], => R) => Z
-                  , pipeM: (=> F[Pipe[A, B, F, R]], => F[R]) => Z): Z = pipeM(pm, fr)
+                  , pipeM: (=> F[Pipe[A, B, F, R]], => Finalize[F, R]) => Z): Z = pipeM(pm, fr)
     }
 
-    def unapply[A, B, F[_], R](p: Pipe[A, B, F, R]): Option[(F[Pipe[A, B, F, R]], F[R])] =
+    def unapply[A, B, F[_], R](p: Pipe[A, B, F, R]): Option[(F[Pipe[A, B, F, R]], Finalize[F, R])] =
       p.fold(ToNone3, ToNone2, ToNone2, (i, r) => Some(i, r))
   }
 }
@@ -192,7 +225,7 @@ trait PipeInstances {
   implicit def pipeMonadTrans[I, O]: MonadTrans[({type l[a[_], b] = Pipe[I, O, a, b]})#l] = new MonadTrans[({type l[a[_], b] = Pipe[I, O, a, b]})#l] {
     implicit def apply[M[_]](implicit M0: Monad[M]): Monad[({type l[a] = Pipe[I, O, M, a]})#l] = pipeMonad[I, O, M]
 
-    def liftM[G[_], A](ga: G[A])(implicit M: Monad[G]): Pipe[I, O, G, A] = PipeM(M.map(ga)(a => pipeMonad[I, O, G].point(a)), ga)
+    def liftM[G[_], A](ga: G[A])(implicit M: Monad[G]): Pipe[I, O, G, A] = PipeM(M.map(ga)(a => pipeMonad[I, O, G].point(a)), FinalizeM(ga))
   }
 
   implicit def pipeMonoid[A, B, F[_]](implicit F: Monad[F]): Monoid[Pipe[A, B, F, Unit]] = new Monoid[Pipe[A, B, F, Unit]] {
@@ -200,6 +233,54 @@ trait PipeInstances {
 
     def append(f1: Pipe[A, B, F, Unit], f2: => Pipe[A, B, F, Unit]) = f1 flatMap (_ => f2)
   }
+}
+
+private[conduits] trait FinalizeMonad[F[_]] extends Monad[({type l[r] = Finalize[F, r]})#l] {
+  implicit def F: Monad[F]
+  def bind[A, B](fa: Finalize[F, A])(f: (A) => Finalize[F, B]): Finalize[F, B] = fa flatMap f
+  def point[A](a: => A) = FinalizePure(a)
+}
+
+trait FinalizeInstances {
+
+  implicit def finalizeMonad[F[_]](implicit M0: Monad[F]): Monad[({type l[r] = Finalize[F, r]})#l] = new FinalizeMonad[F] {
+    implicit val F = M0
+  }
+
+  implicit def finalizeMonadTrans: MonadTrans[({type l[a[_], b] = Finalize[a, b]})#l] = new MonadTrans[({type l[a[_], b] = Finalize[a, b]})#l] {
+    implicit def apply[M[_]](implicit M0: Monad[M]): Monad[({type l[a] = Finalize[M, a]})#l] = finalizeMonad[M]
+    def liftM[G[_], A](ga: G[A])(implicit M: Monad[G]): Finalize[G, A] = FinalizeM(ga)
+  }
+
+  implicit def finalizeMonadIO[F[_]](implicit M: MonadIO[F]): MonadIO[({type l[r] = Finalize[F, r]})#l]= new MonadIO[({type l[r] = Finalize[F, r]})#l] with FinalizeMonad[F] {
+    implicit val F = M
+    def liftIO[A](ioa: IO[A]) = FinalizeM(M.liftIO(ioa))
+  }
+
+  implicit def finalizeMonadThrow[F[_]](implicit MT: MonadThrow[F], F0: Monad[F]): MonadThrow[({type l[r] = Finalize[F, r]})#l] = new MonadThrow[({type l[r] = Finalize[F, r]})#l] {
+    implicit def M = finalizeMonad[F]
+
+    def monadThrow[A](e: Throwable) = finalizeMonadTrans.liftM(MT.monadThrow[A](e))
+  }
+}
+
+trait FinalizeFunctions {
+  def runFinalize[F[_], R](f: Finalize[F, R])(implicit F: Monad[F]): F[R] = f match {
+    case FinalizePure(r) => F.point(r)
+    case FinalizeM(mr) => mr
+  }
+
+  def combineFinalize[F[_], R](f1: Finalize[F, Unit], f2: Finalize[F, R])(implicit F: Monad[F]): Finalize[F, R] = (f1, f2) match {
+    case (FinalizePure(()), f) => f
+    case (FinalizeM(x), FinalizeM(y)) => FinalizeM(F.bind(x)(_ => y))
+    case (FinalizeM(x), FinalizePure(y)) => FinalizeM(F.bind(x)(_ => F.point(y)))
+  }
+
+//  -- Since 0.4.1
+//  combineFinalize :: Monad m => Finalize m () -> Finalize m r -> Finalize m r
+//  combineFinalize (FinalizePure ()) f = f
+//  combineFinalize (FinalizeM x) (FinalizeM y) = FinalizeM $ x >> y
+//  combineFinalize (FinalizeM x) (FinalizePure y) = FinalizeM $ x >> return y
 }
 
 trait PipeFunctions {
@@ -210,7 +291,7 @@ trait PipeFunctions {
    */
   def pipe[A, B, C, F[_], R](p1: => Pipe[A, B, F, Unit], p2: => Pipe[B, C, F, R])(implicit F: Monad[F]): Pipe[A, C, F, R] =
     pipeResume(p1, p2) flatMap (pr =>
-      pipeMonadTrans.liftM(pr._1.pipeClose) flatMap (_ => pipes.pipeMonad[A, C, F].point(pr._2))
+      pipeMonadTrans.liftM(runFinalize(pr._1.pipeClose)) flatMap (_ => pipes.pipeMonad[A, C, F].point(pr._2))
     )
 
   /**
@@ -220,79 +301,39 @@ trait PipeFunctions {
    * Composition is biased towards checking the right Pipe first to avoid pulling
    * data that is not needed. Doing so could cause data loss.
    */
-  def pipeResume[A, B, C, F[_], R](p1: => Pipe[A, B, F, Unit], p2: => Pipe[B, C, F, R])(implicit F: Monad[F]): Pipe[A, C, F, (Pipe[A, B, F, Unit], R)] = {
-    //wip on getting this to run on large pipestreams without getting a SOE. This implementation is
-    //likely not very efficient, pipeResume is called recursively in a number of places, which runs the Trampoline each time.
-    def go(left: => Pipe[A, B, F, Unit], right: => Pipe[B, C, F, R]): Trampoline[Pipe[A, C, F, (Pipe[A, B, F, Unit], R)]] = {
-      (left, right) match {
-        //both pipes finished, return leftover of left pipe and leftovers of right pipe in the result.
-        case (Done(leftoverl, ()), Done(leftoverr, r)) => leftoverr match {
-          case None => return_(Done(leftoverl, (pipes.pipeMonad[A, B, F].point(()), r)))
-          case Some(i) => return_(Done(leftoverl, (HaveOutput(Done(None, ()), F.point(()), i), r)))
+  def pipeResume[A, B, C, F[_], R](p1: Pipe[A, B, F, Unit], p2: Pipe[B, C, F, R])(implicit F: Monad[F]): Pipe[A, C, F, (Pipe[A, B, F, Unit], R)] = {
+    def go(left: => Pipe[A, B, F, Unit], right: => Pipe[B, C, F, R]): Trampoline[Pipe[A, C, F, (Pipe[A, B, F, Unit], R)]] = right match {
+      case Done(leftoverr, r) => {
+        val (leftover, left1, leftClose) = left match {
+          case Done(leftoverl, ()) => (leftoverl, Done[A, B, F, Unit](None, ()), FinalizePure[F, Unit](()))
+          case _ => (None, left, left.pipeClose)
         }
-        //right pipe is done, terminate and return leftovers.
-        case (left, Done(leftoverr, r)) => leftoverr match {
-          case None => return_(Done(None, (left, r)))
-          case Some(i) => return_(Done(None, (HaveOutput(left, left.pipeClose, i), r)))
+        val left11 = leftoverr match {
+          case Some(a) => HaveOutput(left1, leftClose, a)
+          case None => left1
         }
-        //left pipe needs input, ask for it
-        case (NeedInput(p, c), right) => return_(NeedInput(a => pipeResume(p(a), right)
-          , pipeResume(c, right).flatMap(pr => {
-            pipeMonadTrans.liftM(pr._1.pipeClose)
+       return_(Done(leftover, (left11, r)))
+      }
+      case PipeM(mp, c) => return_(PipeM(F.map(mp)(p => pipeResume(left, p)), c.map(r => (left, r))))
+      case HaveOutput(p, c, o) => return_(HaveOutput(pipeResume(left, p), c.map(r => (left, r)), o))
+      case NeedInput(rp, rc) => left match {
+        case HaveOutput(lp, _, a) => suspend(go(lp, rp(a)))
+        case NeedInput(p, c) => return_(NeedInput(a => pipeResume(p(a), right),
+          pipeResume(c, right).flatMap(pr => {
+            pipeMonadTrans.liftM(runFinalize(pr._1.pipeClose))
             pipes.pipeMonad[A, C, F].point((pipes.pipeMonad[A, B, F].point(()), pr._2))
-          })))
-        //left pipe has output, right pipe wants it
-        case (HaveOutput(lp, _, a), NeedInput(rp, _)) => suspend(go(lp, rp(a)))
-        //right pipe needs to run a monadic action
-        case (left, PipeM(mp, c)) => return_(PipeM(F.map(mp)(p => pipeResume(left, p)), F.map(c)(r => (left, r))))
-        //right Pipe has some output, provide it downstream and continue.
-        case (left, HaveOutput(p, c, o)) => return_(HaveOutput(pipeResume(left, p), F.map(c)(r => (left, r)), o))
-      //left pipe is Done, right pipe needs input. Tell the right pipe there is no more input
-        //eventually replace its leftovers with the left pipe leftover
-        case (Done(l, ()), NeedInput(_, c)) => return_(replaceLeftOver(l, c).map(r => (pipes.pipeMonad[A, B, F].point(()), r)))
-        //left pipe needs to run a monadic action
-        case (PipeM(mp, c), right) => return_(PipeM(F.map(mp)(p => pipeResume(p, right))
-          , F.bind(c)(_ => F.map(right.pipeClose)(r => (pipes.pipeMonad[A, B, F].point(()), r)))
+          }))
+        )
+        case Done(l, ()) => return_(replaceLeftOver(l, rc).map(r => (pipes.pipeMonad[A, B, F].point(()), r)))
+        case PipeM(mp, c) =>  return_(PipeM(F.map(mp)(p => pipeResume(p, right))
+//          , F.bind(c)(_ => F.map(right.pipeClose)(r => (pipes.pipeMonad[A, B, F].point(()), r)))
+//          , c.flatMap(_ => F.map(right.pipeClose)(r => (pipes.pipeMonad[A, B, F].point(()), r)))
+          , combineFinalize(c, right.pipeClose).flatMap(r => (FinalizePure(pipes.pipeMonad[A, B, F].point(()), r)))
         ))
       }
     }
     go(p1, p2).run
   }
-
-  def pipeRes[A, B, C, F[_], R](p1: => Pipe[A, B, F, Unit], p2: => Pipe[B, C, F, R])(implicit F: Monad[F]): Pipe[A, C, F, (Pipe[A, B, F, Unit], R)] = {
-      (p1, p2) match {
-        //both pipes finished, return leftover of left pipe and leftovers of right pipe in the result.
-        case (Done(leftoverl, ()), Done(leftoverr, r)) => leftoverr match {
-          case None => Done(leftoverl, (pipes.pipeMonad[A, B, F].point(()), r))
-          case Some(i) => Done(leftoverl, (HaveOutput(Done(None, ()), F.point(()), i), r))
-        }
-        //right pipe is done, terminate and return leftovers.
-        case (left, Done(leftoverr, r)) => leftoverr match {
-          case None => Done(None, (left, r))
-          case Some(i) => Done(None, (HaveOutput(left, left.pipeClose, i), r))
-        }
-        //left pipe needs input, ask for it
-        case (NeedInput(p, c), right) => NeedInput(a => pipeResume(p(a), right)
-          , pipeResume(c, right).flatMap(pr => {
-            pipeMonadTrans.liftM(pr._1.pipeClose)
-            pipes.pipeMonad[A, C, F].point((pipes.pipeMonad[A, B, F].point(()), pr._2))
-          }))
-        //left pipe has output, right pipe wants it
-        case (HaveOutput(lp, _, a), NeedInput(rp, _)) => pipeRes(lp, rp(a))
-        //right pipe needs to run a monadic action
-        case (left, PipeM(mp, c)) => PipeM(F.map(mp)(p => pipeRes(left, p)), F.map(c)(r => (left, r)))
-        //right Pipe has some output, provide it downstream and continue.
-        case (left, HaveOutput(p, c, o)) => HaveOutput(pipeRes(left, p), F.map(c)(r => (left, r)), o)
-      //left pipe is Done, right pipe needs input. Tell the right pipe there is no more input
-        //eventually replace its leftovers with the left pipe leftover
-        case (Done(l, ()), NeedInput(_, c)) => replaceLeftOver(l, c).map(r => (pipes.pipeMonad[A, B, F].point(()), r))
-        //left pipe needs to run a monadic action
-        case (PipeM(mp, c), right) => PipeM(F.map(mp)(p => pipeResume(p, right))
-          , F.bind(c)(_ => F.map(right.pipeClose)(r => (pipes.pipeMonad[A, B, F].point(()), r)))
-        )
-      }
-    }
-
 
   private def replaceLeftOver[A, B, C, F[_], R](l: => Option[A], p1: => Pipe[C, B, F, R])(implicit F: Monad[F]): Pipe[A, B, F, R] = p1.fold(
     haveOutput = (p, c, o) => HaveOutput(replaceLeftOver(l, p), c, o)
@@ -305,7 +346,7 @@ trait PipeFunctions {
    * Run a complete pipeline until processing completes.
    */
   def runPipe[F[_], R](p: => Pipe[Void, Void, F, R])(implicit F: Monad[F]): F[R] = p.fold(
-    haveOutput = (_, c, _) => c
+    haveOutput = (_, c, _) => runFinalize(c)
     , needInput = (_, c) => runPipe(c)
     , done = (_, r) => F.point(r)
     , pipeM = (mp, _) => F.bind(mp)(p1 => runPipe(p1))
@@ -315,7 +356,7 @@ trait PipeFunctions {
    * Send a single output value downstream.
    */
   def yieldp[A, B, F[_]](b: => B)(implicit F: Monad[F]): Pipe[A, B, F, Unit] =
-    HaveOutput(Done(None, ()), F.point(()), b)
+    HaveOutput(Done(None, ()), FinalizePure(()), b)
 
   /**
    * yieldBind is equivalent to yield b flatMap(_ => p), but the implementation is more efficient.
@@ -329,7 +370,7 @@ trait PipeFunctions {
   def yieldMany[A, B, F[_]](os: => Stream[B])(implicit F: Monad[F]): Pipe[A, B, F, Unit] = {
     def go(s: => Stream[B]): Pipe[A, B, F, Unit] = s match {
       case Stream.Empty => Done(None, ())
-      case x #:: xs => HaveOutput(go(xs), F.point(()), x)
+      case x #:: xs => HaveOutput(go(xs), FinalizePure(()), x)
     }
     go(os)
   }
@@ -356,7 +397,7 @@ trait PipeFunctions {
    *
    */
   def sinkToPipe[A, B, F[_], R](s: Sink[A, F, R])(implicit F: Monad[F]): Pipe[A, B, F, R] = s.fold(
-    haveOutput = (_, c, _) => pipeMonadTrans.liftM(c)
+    haveOutput = (_, _, o) => Void.absurd(o)
     , needInput = (p, c) => NeedInput(i => sinkToPipe(p.apply(i)), sinkToPipe(c))
     , done = (i, r) => Done(i, r)
     , pipeM = (mp, c) => PipeM(F.map(mp)(p => sinkToPipe(p)), c)

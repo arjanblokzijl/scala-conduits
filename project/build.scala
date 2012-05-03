@@ -8,13 +8,40 @@ object ScalaConduitsBuild extends Build {
     id = "scala-conduits",
     base = file("."),
     settings = standardSettings,
-    aggregate = Seq(resourcet, conduits, examples, benchmark)
+    aggregate = Seq(resourcet, bytestring, text, conduits, examples, benchmark)
   )
 
   lazy val conduits = Project(
     id = "conduits",
     base = file("conduits"),
+    dependencies = Seq[ClasspathDep[ProjectReference]](resourcet, bytestring, text),
+    settings = standardSettings ++ Seq(
+      libraryDependencies ++= Seq(Dependencies.scalaz, Dependencies.scalazEffect, Dependencies.ScalaCheck, Dependencies.Specs)
+    )
+  )
+
+  lazy val bytestring = Project(
+    id = "bytestring",
+    base = file("bytestring"),
     dependencies = Seq[ClasspathDep[ProjectReference]](resourcet),
+    settings = standardSettings ++ Seq(
+      libraryDependencies ++= Seq(Dependencies.scalaz, Dependencies.scalazEffect, Dependencies.ScalaCheck, Dependencies.Specs)
+    )
+  )
+
+  lazy val text = Project(
+    id = "text",
+    base = file("text"),
+    dependencies = Seq[ClasspathDep[ProjectReference]](bytestring),
+    settings = standardSettings ++ Seq(
+      libraryDependencies ++= Seq(Dependencies.scalaz, Dependencies.scalazEffect, Dependencies.ScalaCheck, Dependencies.Specs)
+    )
+  )
+
+  lazy val parse = Project(
+    id = "parse",
+    base = file("parse"),
+    dependencies = Seq[ClasspathDep[ProjectReference]](bytestring, text),
     settings = standardSettings ++ Seq(
       libraryDependencies ++= Seq(Dependencies.scalaz, Dependencies.scalazEffect, Dependencies.ScalaCheck, Dependencies.Specs)
     )

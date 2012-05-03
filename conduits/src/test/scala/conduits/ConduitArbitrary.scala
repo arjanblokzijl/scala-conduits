@@ -1,11 +1,9 @@
 package conduits
 
-import binary.ByteString
+import bs.ByteString
 
 import org.scalacheck.{Gen, Arbitrary}
-import java.nio.charset.Charset
-import text.{Encoding, Text}
-import Encoding._
+import text._
 
 /**
  * User: arjan
@@ -17,5 +15,5 @@ object ConduitArbitrary {
 
    implicit def textArbitrary: Arbitrary[Text] = Arbitrary(Arbitrary.arbitrary[Array[Char]].map(new Text(_)))
 
-   implicit def charsetArbitrary: Arbitrary[Charset] = Arbitrary(Gen.oneOf(UTF8, UTF16))
+//   implicit def charsetArbitrary: Arbitrary[Charset] = Arbitrary(Gen.oneOf(UTF8, UTF16))
 }

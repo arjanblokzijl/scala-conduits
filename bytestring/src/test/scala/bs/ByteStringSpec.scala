@@ -1,5 +1,4 @@
-package conduits
-package binary
+package bs
 
 /**
  * User: arjan
@@ -7,7 +6,7 @@ package binary
 
 class ByteStringSpec extends FileSpecification {
   val bsi = ByteString.byteStringInstance
-  "a bytestring" should {
+  "a bs" should {
     "reading a file twice should be equal" in {
       val bs1 = ByteString.readFile(test1).unsafePerformIO
       val bs2 = ByteString.readFile(test1).unsafePerformIO

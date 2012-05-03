@@ -1,7 +1,6 @@
-package conduits
 package text
 
-import binary.ByteString
+import bs.ByteString
 import java.nio.charset.{Charset, CharsetDecoder, CharsetEncoder}
 
 /**

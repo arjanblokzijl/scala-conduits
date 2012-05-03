@@ -1,8 +1,7 @@
-package conduits
 package text
 
-
 //TODO reduce duplication found in here and LText without going through too much type annotation hassle.
+
 import LText._
 import scalaz.{Show, Order, Monoid}
 import scalaz.effect.IO
@@ -23,12 +22,12 @@ sealed trait LText  {
 
   /**
    * The 'cons' operation, pre-pending the given byte to this ByteString. This operation
-   * creates a singleton byte array with the given byte as first element, and this bytestring instance as the rest of the chunks.
+   * creates a singleton byte array with the given byte as first element, and this bs instance as the rest of the chunks.
    */
   def #::(c: => Char): LText = Chunk(Text.singleton(c), this)
 
   /**
-   * Takes the given number of bytes from this bytestring.
+   * Takes the given number of bytes from this bs.
    */
   def take(n: Int): LText = this match {
     case Empty() => Empty.apply
@@ -105,6 +104,7 @@ object LText extends LTextFunctions with LTextInstances {
     def apply = new LText {
       def fold[Z](empty: => Z, chunk: (=> Text, => LText) => Z): Z = empty
     }
+
     def unapply(lt: LText): Boolean = lt.fold(true, (_, _) => false)
   }
 
@@ -112,22 +112,24 @@ object LText extends LTextFunctions with LTextInstances {
     def apply(bs: => Text, lbs: => LText) = new LText {
       def fold[Z](empty: => Z, chunk: (=> Text, => LText) => Z): Z = chunk(bs, lbs)
     }
+
     def unapply(lt: LText): Option[(Text, LText)] = lt.fold(None, (c, cs) => Some(c, cs))
   }
+
 }
 
 sealed trait LTextFunctions {
   def empty: LText = Empty.apply
 
-  val DefaultChunkSize: Int = 8*1024
+  val DefaultChunkSize: Int = 8 * 1024
 
   def readFile(f: File, chunkSize: Int = DefaultChunkSize): IO[LText] =
-      IO(new FileInputStream(f).getChannel) flatMap(getContents(_, chunkSize))
+    IO(new FileInputStream(f).getChannel) flatMap (getContents(_, chunkSize))
 
   def getContents(chan: ByteChannel, capacity: Int = DefaultChunkSize): IO[LText] = {
     def loop: IO[LText] = {
       Text.getContents(chan, capacity).flatMap((bs: Text) =>
-        if (bs.isEmpty) IO(chan.close) flatMap(_ => IO(Empty.apply))
+        if (bs.isEmpty) IO(chan.close) flatMap (_ => IO(Empty.apply))
         else {
           for {
             cs <- loop.unsafeInterleaveIO
@@ -142,22 +144,22 @@ sealed trait LTextFunctions {
   def fromChunks(s: => Stream[Text]): LText = s match {
     case Stream.Empty => Empty.apply
     case x #:: xs => if (x.isEmpty) fromChunks(xs)
-                     else Chunk(x, fromChunks(xs))
+    else Chunk(x, fromChunks(xs))
   }
 
   def pack(s: => Stream[Char], chunkSize: Int = Text.DefaultChunkSize): LText = s match {
-      case Stream.Empty => Empty.apply
-      case _ => {
-        val (xs, xss) = s.splitAt(chunkSize)
-        val head = new Text(xs.toArray)
-        if (xss isEmpty) Chunk(head, Empty.apply)
-        else Chunk(head, pack(xss))
-      }
+    case Stream.Empty => Empty.apply
+    case _ => {
+      val (xs, xss) = s.splitAt(chunkSize)
+      val head = new Text(xs.toArray)
+      if (xss isEmpty) Chunk(head, Empty.apply)
+      else Chunk(head, pack(xss))
     }
+  }
 }
 
 sealed trait LTextInstances {
-  implicit val lTextStringInstance: Monoid[LText] with Order[LText] with Show[LText] = new Monoid[LText] with Order[LText] with Show[LText]  {
+  implicit val lTextStringInstance: Monoid[LText] with Order[LText] with Show[LText] = new Monoid[LText] with Order[LText] with Show[LText] {
     def show(f: LText) = f match {
       case Empty() => "<Empty>".toList
       case Chunk(c, cs) => Text.textInstance.show(c) ::: show(cs)

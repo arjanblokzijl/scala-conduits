@@ -1,5 +1,5 @@
 package conduits
-package text
+package ctext
 
 import pipes._
 import Pipe._
@@ -11,10 +11,12 @@ import std.anyVal.byteInstance
 import LazyOption._
 import std.function._
 import ConduitFunctions._
-import binary.{Char8, ByteString}
+import bs.{Char8, ByteString}
 import java.nio.charset.{CharsetDecoder, UnmappableCharacterException}
 import CTextFunctions._
 import Finalize._
+import text._
+import bs._
 
 object CText {
 
@@ -250,20 +252,20 @@ object CTextFunctions {
    * Evaluates the first argument, and returns LazySome if
    * no exception occurs. Otherwise, LazyNone is returned.
    */
-  private[text] def maybeDecode[A, B](a: => A, b: => B): LazyOption[(A, B)] =
+  private[ctext] def maybeDecode[A, B](a: => A, b: => B): LazyOption[(A, B)] =
      try {
        val a1 = a//evaluate first argument
        lazySome(a1, b)
      } catch {case e: Throwable => lazyNone}
 
-  private[text] def byteSplits(bytes: ByteString): Seq[(ByteString, ByteString)] = {
+  private[ctext] def byteSplits(bytes: ByteString): Seq[(ByteString, ByteString)] = {
     def loop(n: Int): Seq[(ByteString, ByteString)] =
       if (n == 0) Seq((ByteString.empty, bytes))
       else bytes.splitAt(n) +: loop(n - 1)
     loop(bytes.length)
   }
 
-  private[text] def splitSlowly(dec: ByteString => Text, bytes: ByteString): (Text, Either[(TextException, ByteString), ByteString]) = {
+  private[ctext] def splitSlowly(dec: ByteString => Text, bytes: ByteString): (Text, Either[(TextException, ByteString), ByteString]) = {
     val splits = byteSplits(bytes)
     def tryDec(bs: ByteString, dec: ByteString => Text): Either[TextException, Text] =
        try {

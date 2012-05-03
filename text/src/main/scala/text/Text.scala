@@ -1,4 +1,3 @@
-package conduits
 package text
 
 import collection.IndexedSeqOptimized
@@ -84,7 +83,9 @@ trait TextFunctions {
 }
 
 trait TextInstances {
+
   import Text._
+
   implicit val textInstance: Monoid[Text] with Order[Text] with Show[Text] = new Monoid[Text] with Order[Text] with Show[Text] {
     def show(f: Text) = f.toString.toList
 

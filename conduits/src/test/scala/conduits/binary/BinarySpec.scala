@@ -10,6 +10,7 @@ import resource._
 import empty.Void
 import CL._
 import Binary._
+import bs._
 
 import Conduits._
 import org.specs2.ScalaCheck

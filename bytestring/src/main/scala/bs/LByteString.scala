@@ -88,15 +88,19 @@ sealed trait LByteString {
     if (sb.length < 64) Chunk(b &: sb, lb) else Chunk(ByteString.singleton(b), lb)
   )
 
-  def append(ys: => LByteString): LByteString = fold(empty = ys, chunk = (sb, lb) =>
-    Chunk(sb, lb append ys)
-  )
+  /**Appends two lazy bytestrings.*/
+  def append(ys: => LByteString): LByteString = this match {
+    case Empty() => ys
+    case Chunk(b, bs) => Chunk(b, bs append ys)
+  }
 
+  /**Splits the bytestring into its head and tail. Returns None if the Bytestring is empty.*/
   def uncons: Option[(Byte, LByteString)] = this match {
     case Empty() => None
     case Chunk(c, cs) => Some(c.head, if (c.length == 1) cs else Chunk(c.tail, cs))
   }
 
+  /**Takes part of the bytestring while the conditional is true.*/
   def takeWhile(p: Byte => Boolean): LByteString = this match {
     case Empty() => Empty.apply
     case Chunk(c, cs) => {
@@ -107,6 +111,7 @@ sealed trait LByteString {
     }
   }
 
+  /**Drops part of the bytestring while the conditional is true.*/
   def dropWhile(p: Byte => Boolean): LByteString = this match {
     case Empty() => Empty.apply
     case Chunk(c, cs) => {
@@ -116,6 +121,7 @@ sealed trait LByteString {
     }
   }
 
+  /**Gets the byte at the specified index.*/
   def apply(idx: Int): Byte = this match {
     case Empty() => sys.error("apply on empty LByteString")
     case Chunk(c, cs) =>
@@ -128,6 +134,7 @@ sealed trait LByteString {
     case Chunk(c, cs) => c.length + cs.length
   }
 
+  /**Applies the provided function to each Byte in the bytestring.*/
   def map(f: Byte => Byte): LByteString = this match {
     case Empty() => Empty.apply
     case Chunk(c, cs) => Chunk(ByteString.fromSeq(c map f), cs map f)

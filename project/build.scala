@@ -8,7 +8,7 @@ object ScalaConduitsBuild extends Build {
     id = "scala-conduits",
     base = file("."),
     settings = standardSettings,
-    aggregate = Seq(resourcet, bytestring, text, conduits, examples, benchmark)
+    aggregate = Seq(resourcet, bytestring, text, conduits, parse, examples, benchmark)
   )
 
   lazy val conduits = Project(
@@ -65,7 +65,7 @@ object ScalaConduitsBuild extends Build {
   lazy val benchmark: Project = Project(
     id = "benchmark",
     base = file("benchmark"),
-    dependencies = Seq[ClasspathDep[ProjectReference]](conduits),
+    dependencies = Seq[ClasspathDep[ProjectReference]](conduits, bytestring, text),
     settings = benchmarkSettings
   )
 

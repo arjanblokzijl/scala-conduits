@@ -5,6 +5,7 @@ import empty.Void
 import scalaz._
 import CL._
 import binary._
+import bs._
 import Conduits._
 
 object BinaryBenchmark extends MyRunner { val cls = classOf[BinaryBenchmark]}

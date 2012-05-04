@@ -45,5 +45,9 @@ class LByteStringSpec extends Specification with ScalaCheck {
       val s = Stream.from(1).map(_.toByte)
       LByteString.pack(s).take(20).unpack must be_==(s.take(20))
     }
+    "handle map lazy" in {
+      val s = Stream.from(1).map(_.toByte)
+      LByteString.pack(s).map(b => (b + 1).toByte).take(20).unpack must be_==(s.map(b => (b + 1).toByte).take(20))
+    }
   }
 }

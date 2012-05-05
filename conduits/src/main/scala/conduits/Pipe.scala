@@ -74,18 +74,18 @@ sealed trait Pipe[A, B, F[_], R] {
     through(this)
   }
 
-//  /**
-//   * Transforms the Monad a Pipe lives in.
-//   */
-//  def transPipe[G[_]](f: Forall[({type λ[A] = F[A] => G[A]})#λ])(implicit M: Monad[F], G: Monad[G]): Pipe[A, B, G, R] = {
-//    def go(pipe: Pipe[A, B, F, R]): Pipe[A, B, G, R] = pipe match {
-//      case Done(a, b) => Done(a, b)
-//      case NeedInput(p, c) => NeedInput[A, B, G, R](i => go(p(i)), go(c))
-//      case HaveOutput(p, c, o) => HaveOutput[A, B, G, R](go(p), f.apply(c), o)
-//      case PipeM(mp, c) => PipeM[A, B, G, R](f.apply(M.map(mp)(p => go(p))), f.apply(c))
-//    }
-//    go(this)
-//  }
+  /**
+   * Transforms the Monad a Pipe lives in.
+   */
+  def transPipe[G[_]](f: Forall[({type λ[A] = F[A] => G[A]})#λ])(implicit M: Monad[F], G: Monad[G]): Pipe[A, B, G, R] = {
+    def go(pipe: Pipe[A, B, F, R]): Pipe[A, B, G, R] = pipe match {
+      case Done(a, b) => Done(a, b)
+      case NeedInput(p, c) => NeedInput[A, B, G, R](i => go(p(i)), go(c))
+      case HaveOutput(p, c, o) => HaveOutput[A, B, G, R](go(p), c.transFinalize(f), o)
+      case PipeM(mp, c) => PipeM[A, B, G, R](f.apply(M.map(mp)(p => go(p))), c.transFinalize(f))
+    }
+    go(this)
+  }
 
   def mapOutput[C](f: B => C)(implicit M: Monad[F]): Pipe[A, C, F, R] = {
     def go(pipe: Pipe[A, B, F, R]): Pipe[A, C, F, R] = pipe match {
@@ -125,6 +125,11 @@ sealed trait Finalize[F[_], R] {
       case FinalizePure(x) => M.point(x)
       case FinalizeM(mx) => mx
     }))
+  }
+
+  def transFinalize[G[_]](f: Forall[({type λ[A] = F[A] => G[A]})#λ])(implicit M: Monad[F], G: Monad[G]): Finalize[G, R] = this match {
+    case FinalizePure(r) => FinalizePure(r)
+    case FinalizeM(mr) => FinalizeM(f.apply(mr))
   }
 
   def fold[Z](res: R => Z, ff: F[R] => Z): Z

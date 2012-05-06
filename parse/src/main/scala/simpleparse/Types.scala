@@ -4,7 +4,7 @@ package simpleparse
  * User: arjan
  */
 import ParseResult._
-import scalaz.{Monad, Functor, Forall}
+import scalaz.{Monoid, Monad, Functor, Forall}
 
 sealed trait ParseResult[T, A] {
   def fold[Z](done: (=> T, => A)=> Z, partial: (=> T => ParseResult[T, A]) => Z, fail: (=> T, => Stream[String], => String) => Z): Z
@@ -46,7 +46,8 @@ object ParseResult {
     def unapply[T, A](pr: ParseResult[T, A]): Option[(T, Stream[String], String)] = pr.fold(ToNone2, ToNone1, (t, st, s) => Some(t, st, s))
   }
 
-  type Failure[T, R] = Input[T] => Added[T] => More => Stream[String] => String
+//  type Failure[T, R] = Input[T] => Added[T] => More => Stream[String] => String => ParseResult[T, R]
+  type Failure[T, R] = (Input[T], Added[T], More, Stream[String], String) => ParseResult[T, R]
   type Success[T, A, R] = (Input[T], Added[T], More, A) => ParseResult[T, R]
 }
 
@@ -63,6 +64,7 @@ sealed trait More
 case object Complete extends More
 case object Incomplete extends More
 
+import Parser._
 trait Parser[T, A] {
   type FA[R] = Failure[T, R]
   type SA[R] = Success[T, A, R]
@@ -71,13 +73,19 @@ trait Parser[T, A] {
 
   def flatMap[B](f: A => Parser[T, B]): Parser[T, B] = Parser[T, B]((i0, a0, m0, kf, ks) =>
     runParser(i0, a0, m0, kf, new Forall[SA] {
-      def apply[B] = (i1: Input[T], a1: Added[T], m1: More, a: A) => {
-        val fa = f(a).runParser(i1, a1, m1, kf, ks)
-        fa.apply[B]
-      }
+      def apply[B] = (i1: Input[T], a1: Added[T], m1: More, a: A) =>
+        f(a).runParser(i1, a1, m1, kf, ks).apply[B]
     })
   )
 
+  def plus(b: Parser[T, A])(implicit M: Monoid[T]): Parser[T, A] = {
+    Parser((i0, a0, m0, kf, ks) => {
+      noAdds(i0, a0, m0)((i1, a1, m1) => runParser(i1, a1, m1, new Forall[FA] {
+         def apply[A] = (i1: Input[T], a1: Added[T], m1: More, str: Stream[String], s: String) =>
+           addS[T, PR[A]](i0, a0, m0)(i1, a1, m1)((i2, a2, m2) => b.runParser(i2, a2, m2, kf, ks).apply[A])
+          }, ks))
+    })
+  }
 }
 
 object Parser extends ParserFunctions with ParserInstances {
@@ -98,4 +106,19 @@ trait ParserFunctions {
   def returnP[T, A](a: => A): Parser[T, A] = Parser[T, A]((i0, a0, m0, _kf, ks) => new Forall[Parser[T, A]#PR] {
     def apply[A] = ks.apply(i0, a0, m0, a)
   })
+
+  def addS[T, A](i0: => Input[T], a0: => Added[T], m0: => More)(_i1: => Input[T], a1: => Added[T], m1: => More)(f: (=> Input[T], => Added[T], => More) => A)(implicit M : Monoid[T]): A = {
+    val i = Input(M.append(i0.unI, a1.unA))
+    val a = Added(M.append(a0.unA, a1.unA))
+    val m = (m0, m1) match {
+      case (Complete, _) => Complete
+      case (_, Complete) => Complete
+      case _ => Incomplete
+    }
+    f(i, a, m)
+  }
+
+  def noAdds[T, A](i0: => Input[T], a0: => Added[T], m0: => More)(f: (=> Input[T], => Added[T], => More) => A)(implicit M : Monoid[T]): A =
+    f(i0, Added(M.zero), m0)
+
 }

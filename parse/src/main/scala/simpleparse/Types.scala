@@ -48,7 +48,7 @@ object ParseResult {
 
 //  type Failure[T, R] = Input[T] => Added[T] => More => Stream[String] => String => ParseResult[T, R]
   type Failure[T, R] = (Input[T], Added[T], More, Stream[String], String) => ParseResult[T, R]
-  type Success[T, A, R] = (Input[T], Added[T], More, A) => ParseResult[T, R]
+  type Success[T, B, R] = (Input[T], Added[T], More, B) => ParseResult[T, R]
 }
 
 trait ParseResultInstances {
@@ -69,12 +69,14 @@ trait Parser[T, A] {
   type FA[R] = Failure[T, R]
   type SA[R] = Success[T, A, R]
   type PR[R] = ParseResult[T, R]
-  def runParser(i: Input[T], a: Added[T], m: More, kf: Forall[FA], ks: Forall[SA]): Forall[PR]
+
+//  def runParser(i: Input[T], a: Added[T], m: More, kf: Forall[FA], ks: Forall[SA]): Forall[PR]
+  def runParser(i: Input[T], a: Added[T], m: More, kf: Forall[FA], ks: Forall[({type l[r] = Success[T, A, r]})#l]): Forall[PR]
 
   def flatMap[B](f: A => Parser[T, B]): Parser[T, B] = Parser[T, B]((i0, a0, m0, kf, ks) =>
     runParser(i0, a0, m0, kf, new Forall[SA] {
-      def apply[B] = (i1: Input[T], a1: Added[T], m1: More, a: A) =>
-        f(a).runParser(i1, a1, m1, kf, ks).apply[B]
+      def apply[C] = (i1: Input[T], a1: Added[T], m1: More, a: A) =>
+        f(a).runParser(i1, a1, m1, kf, ks).apply[C]
     })
   )
 
@@ -100,6 +102,12 @@ trait ParserInstances {
 
     def point[A](a: => A) = Parser.returnP(a)
   }
+
+  implicit def parserMonoid[F, A](implicit M: Monoid[F]): Monoid[Parser[F, A]] = new Monoid[Parser[F, A]] {
+    def append(f1: Parser[F, A], f2: => Parser[F, A]) = f1 plus f2
+
+    def zero = failDesc("Monoid: zero")
+  }
 }
 
 trait ParserFunctions {
@@ -121,4 +129,9 @@ trait ParserFunctions {
   def noAdds[T, A](i0: => Input[T], a0: => Added[T], m0: => More)(f: (=> Input[T], => Added[T], => More) => A)(implicit M : Monoid[T]): A =
     f(i0, Added(M.zero), m0)
 
+  def failDesc[T, A](err: String): Parser[T, A] = {
+    Parser[T, A]((i0, a0, m0, _kf, ks) => new Forall[Parser[T, A]#PR] {
+        def apply[A] = _kf.apply(i0, a0, m0, Stream.empty[String], "Failed reading: " + err)
+    })
+  }
 }

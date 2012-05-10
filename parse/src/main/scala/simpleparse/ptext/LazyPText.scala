@@ -49,7 +49,7 @@ object LazyPText {
 trait LazyPTextFunctions {
   import StrictPText._
   import LText._
-  def parse[A](p: StrictPText.TParser[A], s: => LText): PTextResult[A] = {
+  def parse[A](p: StrictPText.TParser[A])(s: => LText): PTextResult[A] = {
     def go(r: StrictPText.TResult[A], ys: LText): PTextResult[A] = r match {
       case ParseResult.Fail(x, stk, msg) => Fail(Chunk(x, ys), stk, msg)
       case ParseResult.Done(x, r) => Done(Chunk(x, ys), r)
@@ -73,4 +73,10 @@ trait LazyPTextFunctions {
     case Done(_, r) => Right(r)
     case Fail(_, _, msg) => Left(msg)
   }
+
+  def maybeP[A](p: StrictPText.TParser[A]): LText => Option[A] = t => maybeResult(parse(p)(t))
+
+  def defP[A](p: StrictPText.TParser[A]): LText => PTextResult[A] = t => parse(p)(t)
+
+  def char
 }

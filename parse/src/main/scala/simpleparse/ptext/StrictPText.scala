@@ -6,6 +6,7 @@ import text.Text
 import simpleparse.{ParseResult => PR}
 import simpleparse.{Parser => P}
 import scalaz.Forall
+import simpleparse.ParseResult.Partial
 
 object StrictPText extends StrictPTextFunctions {
 
@@ -31,4 +32,44 @@ trait StrictPTextFunctions {
          //TODO can this be ever unsafe?
          def apply[A] = (i0, _a0, _m0, a) => PR.Done[Text, A](i0.unI, a.asInstanceOf[A])
        }).apply[A]
+
+
+  def satisfy(p: Char => Boolean): TParser[Char] =
+     ensure(1).flatMap(s => {
+       val w = s.head
+       if (p(w)) put(s.tail).flatMap(_ => Parser.returnP(w))
+       else fail("satisfy")
+     })
+
+  def fail[A](msg: String): TParser[A] =
+    Parser[Text, A]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, A]#PR] {
+      def apply[A] = kf.apply(i0, a0, m0, Stream(msg), msg)
+    })
+
+  def put(s: Text): TParser[Unit] =
+    Parser[Text, Unit]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, Unit]#PR] {
+      def apply[A] = ks.apply(Input(s), a0, m0, ())
+    })
+
+  def ensure(n: Int): TParser[Text] =
+    Parser[Text, Text]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, Unit]#PR] {
+      def apply[A] = if (i0.unI.length >= n) ks.apply(i0, a0, m0, i0.unI)
+                     else demandInput.flatMap(_ => ensure(n)).runParser(i0, a0, m0, kf, ks).apply[A]
+    })
+
+
+  /**Ask for input. If we receive any, pass it to a success continuation, otherwise to a failure continuation.*/
+  def prompt[A](i0: TInput, a0: TAdded, m0: More)(kf: (TInput, TAdded, More) => TResult[A])(ks: (TInput, TAdded, More) => TResult[A]): TResult[A] =
+    Partial[Text, A](s => if (s.isEmpty) kf(i0, a0, Complete)
+                          else ks(Input(i0.unI.append(s)), Added(a0.unA.append(s)), Incomplete))
+
+  def demandInput: TParser[Unit] =
+    Parser[Text, Unit]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, Unit]#PR] {
+        def apply[A] = m0 match {
+           case Complete => kf.apply(i0, a0, m0, Stream("demandInput"), "not enough input")
+           case Incomplete => {
+              prompt(i0, a0, m0)((i, a, m) => kf.apply[A](i, a, m, Stream("demandInput"), "not enough input"))((i, a, m) => ks.apply(i, a, m, ()))
+           }
+         }
+      })
 }

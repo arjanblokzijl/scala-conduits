@@ -33,6 +33,15 @@ trait StrictPTextFunctions {
          def apply[A] = (i0, _a0, _m0, a) => PR.Done[Text, A](i0.unI, a.asInstanceOf[A])
        }).apply[A]
 
+  def ?>[A](p: TParser[A], msg0: String): TParser[A] = {
+    Parser[Text, A]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, A]#PR] {
+      def apply[A] = p.runParser(i0, a0, m0, new Forall[Parser[Text, A]#FA] {
+        def apply[A] = (i, a, m, strs, msg) => kf.apply(i, a, m, msg0 #:: strs, msg)
+      }, ks).apply[A]
+    })
+  }
+
+  def char(c: Char): TParser[Char] = ?>(satisfy(_ == c), c.toString)
 
   def satisfy(p: Char => Boolean): TParser[Char] =
      ensure(1).flatMap(s => {
@@ -41,6 +50,7 @@ trait StrictPTextFunctions {
        else fail("satisfy")
      })
 
+  /**A parser that always runs the failure continuation.*/
   def fail[A](msg: String): TParser[A] =
     Parser[Text, A]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, A]#PR] {
       def apply[A] = kf.apply(i0, a0, m0, Stream(msg), msg)

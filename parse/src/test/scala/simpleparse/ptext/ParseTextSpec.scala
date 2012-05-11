@@ -14,8 +14,7 @@ import org.specs2.ScalaCheck
  */
 
 class ParseTextSpec extends Specification with ScalaCheck {
-  "parse" ! check {(chars: Array[Char]) =>
-    val t = new Text(chars)
+  "parse char" ! check {(chars: Array[Char]) =>
     val p = if (chars.isEmpty) fail("no chars") else char(chars.head)
     val actual = maybeP(p)(fromStrict(fromChars(chars)))
     val expected = if (chars.isEmpty) None else Some(chars.head)

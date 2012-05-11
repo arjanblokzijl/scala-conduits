@@ -33,21 +33,26 @@ trait StrictPTextFunctions {
          def apply[A] = (i0, _a0, _m0, a) => PR.Done[Text, A](i0.unI, a.asInstanceOf[A])
        }).apply[A]
 
+  /**Alias for `label`.*/
   def ?[A](p: TParser[A], msg0: String): TParser[A] = label(p, msg0)
 
-  def label[A](p: TParser[A], msg0: String): TParser[A] = {
+  /**Name the parser in case a failure occurs.*/
+  def label[A](p: TParser[A], msg: String): TParser[A] = {
     Parser[Text, A]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, A]#PR] {
       def apply[A] = p.runParser(i0, a0, m0, new Forall[Parser[Text, A]#FA] {
-        def apply[A] = (i, a, m, strs, msg) => kf.apply(i, a, m, msg0 #:: strs, msg)
+        def apply[A] = (i, a, m, strs, msg1) => kf.apply(i, a, m, msg #:: strs, msg1)
       }, ks).apply[A]
     })
   }
 
+  /**Match a specific character.*/
   def char(c: Char): TParser[Char] = label(satisfy(_ == c), c.toString)
 
+  /**Match any character.*/
   def anyChar: TParser[Char] = satisfy(_ => true)
 
-
+  /**Match any character, except the given one.*/
+  def notChar(c: Char): TParser[Char] = label(satisfy(_ != c), "not " + c)
   /**
    * The parser `satisfy p` succeeds for any character for which the
    * predicate `p` returns 'True'. Returns the character that is

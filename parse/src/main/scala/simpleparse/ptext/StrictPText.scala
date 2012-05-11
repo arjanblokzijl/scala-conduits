@@ -33,7 +33,9 @@ trait StrictPTextFunctions {
          def apply[A] = (i0, _a0, _m0, a) => PR.Done[Text, A](i0.unI, a.asInstanceOf[A])
        }).apply[A]
 
-  def ?>[A](p: TParser[A], msg0: String): TParser[A] = {
+  def ?[A](p: TParser[A], msg0: String): TParser[A] = label(p, msg0)
+
+  def label[A](p: TParser[A], msg0: String): TParser[A] = {
     Parser[Text, A]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, A]#PR] {
       def apply[A] = p.runParser(i0, a0, m0, new Forall[Parser[Text, A]#FA] {
         def apply[A] = (i, a, m, strs, msg) => kf.apply(i, a, m, msg0 #:: strs, msg)
@@ -41,8 +43,13 @@ trait StrictPTextFunctions {
     })
   }
 
-  def char(c: Char): TParser[Char] = ?>(satisfy(_ == c), c.toString)
+  def char(c: Char): TParser[Char] = label(satisfy(_ == c), c.toString)
 
+  /**
+   * The parser `satisfy p` succeeds for any character for which the
+   * predicate `p` returns 'True'. Returns the character that is
+   * actually parsed.
+   */
   def satisfy(p: Char => Boolean): TParser[Char] =
      ensure(1).flatMap(s => {
        val w = s.head
@@ -61,6 +68,17 @@ trait StrictPTextFunctions {
       def apply[A] = ks.apply(Input(s), a0, m0, ())
     })
 
+  def takeWith(n: Int, p: Text => Boolean): TParser[Text] = {
+    ensure(n).flatMap(s => {
+      val h = s.take(n)
+      val t = s.drop(n)
+      if (p(h)) put(t).flatMap(_ => Parser.returnP(h))
+      else fail("takeWith")
+    })
+  }
+
+  def take(n: Int): TParser[Text] = takeWith(n, _ => true)
+  
   def ensure(n: Int): TParser[Text] =
     Parser[Text, Text]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, Unit]#PR] {
       def apply[A] = if (i0.unI.length >= n) ks.apply(i0, a0, m0, i0.unI)

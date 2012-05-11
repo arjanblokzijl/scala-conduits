@@ -42,7 +42,7 @@ trait PTextResultInstances {
   }
 
 }
-object LazyPText {
+object LazyPText extends LazyPTextFunctions {
 
 }
 
@@ -78,5 +78,4 @@ trait LazyPTextFunctions {
 
   def defP[A](p: StrictPText.TParser[A]): LText => PTextResult[A] = t => parse(p)(t)
 
-  def char
 }

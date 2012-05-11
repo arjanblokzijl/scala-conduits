@@ -93,7 +93,7 @@ sealed trait LText  {
 
   def map(f: Char => Char): LText = this match {
     case Empty() => Empty.apply
-    case Chunk(c, cs) => Chunk(Text.fromSeq(c map f), cs map f)
+    case Chunk(c, cs) => Chunk(Text.fromChars(c map f), cs map f)
   }
 }
 

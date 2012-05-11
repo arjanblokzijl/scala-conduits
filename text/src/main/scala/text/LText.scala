@@ -95,6 +95,11 @@ sealed trait LText  {
     case Empty() => Empty.apply
     case Chunk(c, cs) => Chunk(Text.fromChars(c map f), cs map f)
   }
+
+  def toStrict: Text = this match {
+    case Empty() => Text.empty
+    case Chunk(c, cs) => c.append(cs.toStrict)
+  }
 }
 
 
@@ -140,6 +145,7 @@ sealed trait LTextFunctions {
     loop
   }
 
+  def fromStrict(s: Text): LText = Chunk(s, empty)
 
   def fromChunks(s: => Stream[Text]): LText = s match {
     case Stream.Empty => Empty.apply

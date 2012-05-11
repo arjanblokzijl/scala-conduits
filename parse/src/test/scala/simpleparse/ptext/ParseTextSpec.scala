@@ -13,16 +13,15 @@ import Text._
  */
 
 class ParseTextSpec extends Specification {
-
   "parsing text" should {
     "match single character" in {
       val p = char('c')
-      val res = maybeP(p).apply(fromChunks(Stream(fromChars("cdef"))))
+      val res = maybeP(p)(fromStrict(fromChars("cdefc")))
       res mustEqual(Some('c'))
     }
     "fail if string does not start with character" in {
       val p = char('c')
-      maybeP(p).apply(fromChunks(Stream(fromChars("dcef")))) mustEqual(None)
+      maybeP(p).apply(fromStrict(fromChars("dcefc"))) mustEqual(None)
     }
   }
 }

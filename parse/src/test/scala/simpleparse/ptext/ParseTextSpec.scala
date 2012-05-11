@@ -7,21 +7,18 @@ import simpleparse.ptext.StrictPText._
 import simpleparse.ptext.LazyPText._
 import LText._
 import Text._
+import org.specs2.ScalaCheck
 
 /**
  * User: arjan
  */
 
-class ParseTextSpec extends Specification {
-  "parsing text" should {
-    "match single character" in {
-      val p = char('c')
-      val res = maybeP(p)(fromStrict(fromChars("cdefc")))
-      res mustEqual(Some('c'))
-    }
-    "fail if string does not start with character" in {
-      val p = char('c')
-      maybeP(p).apply(fromStrict(fromChars("dcefc"))) mustEqual(None)
-    }
+class ParseTextSpec extends Specification with ScalaCheck {
+  "parse" ! check {(chars: Array[Char]) =>
+    val t = new Text(chars)
+    val p = if (chars.isEmpty) fail("no chars") else char(chars.head)
+    val actual = maybeP(p)(fromStrict(fromChars(chars)))
+    val expected = if (chars.isEmpty) None else Some(chars.head)
+    actual must be_==(expected)
   }
 }

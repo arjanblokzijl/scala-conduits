@@ -45,6 +45,9 @@ trait StrictPTextFunctions {
 
   def char(c: Char): TParser[Char] = label(satisfy(_ == c), c.toString)
 
+  def anyChar: TParser[Char] = satisfy(_ => true)
+
+
   /**
    * The parser `satisfy p` succeeds for any character for which the
    * predicate `p` returns 'True'. Returns the character that is
@@ -78,7 +81,7 @@ trait StrictPTextFunctions {
   }
 
   def take(n: Int): TParser[Text] = takeWith(n, _ => true)
-  
+
   def ensure(n: Int): TParser[Text] =
     Parser[Text, Text]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, Unit]#PR] {
       def apply[A] = if (i0.unI.length >= n) ks.apply(i0, a0, m0, i0.unI)

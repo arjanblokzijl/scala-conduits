@@ -20,4 +20,11 @@ class ParseTextSpec extends Specification with ScalaCheck {
     val expected = if (chars.isEmpty) None else Some(chars.head)
     actual must be_==(expected)
   }
+
+  "take" ! check {(i: Int, chars: Array[Char]) =>
+    val p = take(i)
+    val actual: Option[Text] = maybeP(p)(fromStrict(fromChars(chars)))
+    val expected = if (i > chars.length) None else Some(new Text(chars.take(i)))
+    actual must be_==(expected)
+  }
 }

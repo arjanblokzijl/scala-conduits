@@ -77,12 +77,12 @@ trait StrictPTextFunctions {
     })
 
   def takeWith(n: Int, p: Text => Boolean): TParser[Text] = {
-    ensure(n).flatMap(s => {
-      val h = s.take(n)
-      val t = s.drop(n)
-      if (p(h)) put(t).flatMap(_ => Parser.returnP(h))
-      else fail("takeWith")
-    })
+      ensure(n).flatMap(s => {
+        val h = s.take(n)
+        val t = s.drop(n)
+        if (p(h)) put(t).flatMap(_ => Parser.returnP(h))
+        else fail("takeWith")
+      })
   }
 
   def take(n: Int): TParser[Text] = takeWith(n, _ => true)

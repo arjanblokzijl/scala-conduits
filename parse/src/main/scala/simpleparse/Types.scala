@@ -70,8 +70,14 @@ trait Parser[T, A] {
   type SA[R] = Success[T, A, R]
   type PR[R] = ParseResult[T, R]
 
-//  def runParser(i: Input[T], a: Added[T], m: More, kf: Forall[FA], ks: Forall[SA]): Forall[PR]
   def runParser(i: Input[T], a: Added[T], m: More, kf: Forall[FA], ks: Forall[({type l[r] = Success[T, A, r]})#l]): Forall[PR]
+
+  def map[B](f: A => B): Parser[T, B] = Parser[T, B]((i0, a0, m0, kf0, k) => {
+    runParser(i0, a0, m0, kf0, new Forall[SA] {
+      def apply[C] = (i1: Input[T], a1: Added[T], s1: More, a: A) =>
+        k.apply(i1, a1, s1, f(a))
+     })
+  })
 
   def flatMap[B](f: A => Parser[T, B]): Parser[T, B] = Parser[T, B]((i0, a0, m0, kf, ks) =>
     runParser(i0, a0, m0, kf, new Forall[SA] {

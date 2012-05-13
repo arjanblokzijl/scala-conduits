@@ -5,8 +5,8 @@ import text.Text
 
 import simpleparse.{ParseResult => PR}
 import simpleparse.{Parser => P}
-import scalaz.Forall
 import simpleparse.ParseResult.Partial
+import scalaz.{DList, Forall}
 
 object StrictPText extends StrictPTextFunctions {
 
@@ -107,12 +107,12 @@ trait StrictPTextFunctions {
   def take(n: Int): TParser[Text] = takeWith(n, _ => true)
 
   def takeRest: TParser[List[Text]] = {
-    def go(acc: List[Text]): TParser[List[Text]] = wantInput.flatMap(input =>
+    def go(acc: DList[Text]): TParser[List[Text]] = wantInput.flatMap(input =>
       if (input) get.flatMap(s => {
-        put(Text.empty).flatMap(_ => go(s :: acc))
-      }) else Parser.returnP[Text, List[Text]](acc.reverse)
+        put(Text.empty).flatMap(_ => go(acc :+ s))
+      }) else Parser.returnP[Text, List[Text]](acc.toList)
     )
-    go(List())
+    go(DList())
   }
 
   /**

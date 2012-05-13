@@ -53,6 +53,7 @@ trait StrictPTextFunctions {
 
   /**Match any character, except the given one.*/
   def notChar(c: Char): TParser[Char] = label(satisfy(_ != c), "not " + c)
+
   /**
    * The parser `satisfy p` succeeds for any character for which the
    * predicate `p` returns 'True'. Returns the character that is
@@ -65,6 +66,19 @@ trait StrictPTextFunctions {
        else fail("satisfy")
      })
 
+  /**
+   * The parser `satisfy p` succeeds for any character for which the
+   * predicate `p` returns 'True'. Returns the character that is
+   * actually parsed.
+   */
+  def satisfyWith[A](f: Char => A)(p: A => Boolean): TParser[A] =
+     ensure(1).flatMap(s => {
+       val w = f(s.head)
+       if (p(w)) put(s.tail).flatMap(_ => Parser.returnP(w))
+       else fail("satisfyWith")
+     })
+
+
   /**A parser that always runs the failure continuation.*/
   def fail[A](msg: String): TParser[A] =
     Parser[Text, A]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, A]#PR] {
@@ -74,6 +88,11 @@ trait StrictPTextFunctions {
   def put(s: Text): TParser[Unit] =
     Parser[Text, Unit]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, Unit]#PR] {
       def apply[A] = ks.apply(Input(s), a0, m0, ())
+    })
+
+  def get: TParser[Text] =
+    Parser[Text, Text]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, Text]#PR] {
+      def apply[A] = ks.apply(i0, a0, m0, i0.unI)
     })
 
   def takeWith(n: Int, p: Text => Boolean): TParser[Text] = {
@@ -87,6 +106,26 @@ trait StrictPTextFunctions {
 
   def take(n: Int): TParser[Text] = takeWith(n, _ => true)
 
+  def takeRest: TParser[List[Text]] = {
+    def go(acc: List[Text]): TParser[List[Text]] = wantInput.flatMap(input =>
+      if (input) get.flatMap(s => {
+        put(Text.empty).flatMap(_ => go(s :: acc))
+      }) else Parser.returnP[Text, List[Text]](acc.reverse)
+    )
+    go(List())
+  }
+
+  /**
+   * The parser skip succeeds for any character
+   * for which the predicate `p` returns true.
+   */
+  def skip(p: Char => Boolean): TParser[Unit] =
+    ensure(1).flatMap(s =>
+      if (p(s.head)) put(s.tail)
+      else fail("skip")
+    )
+
+  /**If at least n characters are available, return the input, else fail.*/
   def ensure(n: Int): TParser[Text] =
     Parser[Text, Text]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, Unit]#PR] {
       def apply[A] = if (i0.unI.length >= n) ks.apply(i0, a0, m0, i0.unI)
@@ -99,12 +138,31 @@ trait StrictPTextFunctions {
     Partial[Text, A](s => if (s.isEmpty) kf(i0, a0, Complete)
                           else ks(Input(i0.unI.append(s)), Added(a0.unA.append(s)), Incomplete))
 
+  /**Demand more input via a `Partial` continuation.*/
   def demandInput: TParser[Unit] =
     Parser[Text, Unit]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, Unit]#PR] {
         def apply[A] = m0 match {
            case Complete => kf.apply(i0, a0, m0, Stream("demandInput"), "not enough input")
            case Incomplete => {
               prompt(i0, a0, m0)((i, a, m) => kf.apply[A](i, a, m, Stream("demandInput"), "not enough input"))((i, a, m) => ks.apply(i, a, m, ()))
+           }
+         }
+      })
+
+  /**
+   * This parser always succeeds.  It returns 'True' if any input is
+   * available either immediately or on demand, and 'False' if the end
+   * of all input has been reached.
+   */
+  def wantInput: TParser[Boolean] =
+    Parser[Text, Boolean]((i0, a0, m0, kf, ks) => new Forall[TParser[Boolean]#PR] {
+        def apply[A] =
+          if (!i0.unI.isEmpty) ks.apply(i0, a0, m0, true)
+          else m0 match {
+           case Complete => ks.apply(i0, a0, m0, false)
+           case Incomplete => {
+             println("m0 is Incomplete")
+              prompt(i0, a0, m0)((i, a, m) => ks.apply[A](i, a, m, false))((i, a, m) => ks.apply(i, a, m, true))
            }
          }
       })

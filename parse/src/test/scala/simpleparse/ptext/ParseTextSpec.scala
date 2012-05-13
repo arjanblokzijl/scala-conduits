@@ -27,4 +27,19 @@ class ParseTextSpec extends Specification with ScalaCheck {
     val expected = if (i > chars.length) None else Some(new Text(chars.take(i)))
     actual must be_==(expected)
   }
+
+
+  "skip" should {
+    "skip the given character" in {
+      val text = Text.fromChars("abcabcdefc")
+      val result = maybeP(skip(_ == 'a').flatMap(_ => takeRest))(fromStrict(text))
+      result must be_==(Some(List(Text.fromChars("bcabcdefc"))))
+      success
+    }
+    "return none if text does not start with the given character" in {
+      val text = Text.fromChars("baaacabcdefc")
+      val result = maybeP(skip(_ == 'a').flatMap(_ => takeRest))(fromStrict(text))
+      result must be_==(None)
+    }
+  }
 }

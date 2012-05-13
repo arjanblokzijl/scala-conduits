@@ -125,6 +125,16 @@ trait StrictPTextFunctions {
       else fail("skip")
     )
 
+  def skipWhile(p: Char => Boolean): TParser[Unit] = {
+    def go: TParser[Unit] = get.flatMap(text => {
+      val t = text.dropWhile(p)
+      put(t).flatMap(_ => if (t.isEmpty) wantInput.flatMap(input =>
+                             if (input) go else Parser.parserMonad[Text].point(()))
+                          else Parser.parserMonad[Text].point(()))
+    })
+    go
+  }
+
   /**If at least n characters are available, return the input, else fail.*/
   def ensure(n: Int): TParser[Text] =
     Parser[Text, Text]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, Unit]#PR] {
@@ -161,7 +171,6 @@ trait StrictPTextFunctions {
           else m0 match {
            case Complete => ks.apply(i0, a0, m0, false)
            case Incomplete => {
-             println("m0 is Incomplete")
               prompt(i0, a0, m0)((i, a, m) => ks.apply[A](i, a, m, false))((i, a, m) => ks.apply(i, a, m, true))
            }
          }

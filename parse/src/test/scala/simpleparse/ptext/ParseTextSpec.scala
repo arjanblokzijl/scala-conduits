@@ -15,8 +15,15 @@ import ptext.PTextResult.{Fail, Done}
  */
 
 class ParseTextSpec extends Specification with ScalaCheck {
-  "parse char" ! check {(chars: Array[Char]) =>
-    val p = if (chars.isEmpty) fail("no chars") else char(chars.head)
+  "single char" ! check {(c: Char, chars: Array[Char]) =>
+    val p = char(c)
+    val actual = maybeP(p)(fromStrict(fromChars(chars)))
+    val expected = if (!chars.isEmpty && chars.head == c) Some(chars.head) else None
+    actual must be_==(expected)
+  }
+
+  "any char" ! check {(chars: Array[Char]) =>
+    val p = anyChar
     val actual = maybeP(p)(fromStrict(fromChars(chars)))
     val expected = if (chars.isEmpty) None else Some(chars.head)
     actual must be_==(expected)

@@ -29,6 +29,13 @@ class ParseTextSpec extends Specification with ScalaCheck {
     actual must be_==(expected)
   }
 
+  "string" ! check {(chars: Array[Char]) =>
+    val s = new Text(chars)
+    val p = string(s)
+    val actual: Option[Text] = maybeP(p)(fromStrict(fromChars(chars)))
+    actual must be_==(Some(s))
+  }
+
   "take" ! check {(i: Int, chars: Array[Char]) =>
     val p = take(i)
     val actual: Option[Text] = maybeP(p)(fromStrict(fromChars(chars)))
@@ -67,24 +74,41 @@ class ParseTextSpec extends Specification with ScalaCheck {
       result must be_==(Some(List(Text.fromChars("bcabcdefc"))))
     }
   }
-//  "takeWhile" should {
-//    "take while the predicate holds" in {
-//      val text = Text.fromChars("aabbbcabcdefc")
-//      val (h1, t1) = text.span(c => c == 'a' || c == 'b')
-//      val result = defP(takeWhile(c => c == 'a' || c == 'b'))(fromStrict(text))
-//      result match {
-//        case Done(h, t) => (h.toStrict mustEqual(t1)) and (t mustEqual(h1))
-//        case _ => failure
-//      }
-//      success
-//    }
-//    "return input if condition does not hold" in {
-//      val text = Text.fromChars("aabbbcabcdefc")
-//      val result = defP(takeWhile(c => c == 'b' ))(fromStrict(text))
-//      result match {
-//        case Done(h, t) => (h.toStrict mustEqual(text)) and (t must beEmpty)
-//        case _ => failure("should return Done")
-//      }
-//    }
-//  }
+  "takeWhile" should {
+    "take while the predicate holds" in {
+      val text = Text.fromChars("aabbbcabcdefc")
+      val (h1, t1) = text.span(c => c == 'a' || c == 'b')
+      val result = defP(takeWhile(c => c == 'a' || c == 'b'))(fromStrict(text))
+      result match {
+        case Done(h, t) => (h.toStrict mustEqual(t1)) and (t mustEqual(h1))
+        case _ => failure("should return Done")
+      }
+      success
+    }
+    "return input if condition does not hold" in {
+      val text = Text.fromChars("aabbbcabcdefc")
+      val result = defP(takeWhile(c => c == 'b' ))(fromStrict(text))
+      result match {
+        case Done(h, t) => (h.toStrict mustEqual(text)) and (t must beEmpty)
+        case _ => failure("should return Done")
+      }
+    }
+  }
+
+  "string" should {
+    "fail if text does not contain string" in  {
+      val text = Text.fromChars("aabbbcabcdefc")
+      val s = Text.fromChars("abbb")
+      val res = maybeP(string(s))(fromStrict(text))
+      res must beNone
+    }
+    "succeed if text does contain string" in  {
+      val text = Text.fromChars("aabbbbcabcdefc")
+      val s = Text.fromChars("aabbb")
+      defP(string(s))(fromStrict(text)) match {
+        case Done(leftover, res) => (res mustEqual(s)) and (leftover.toStrict mustEqual(Text.fromChars("bcabcdefc")))
+        case _ => failure("")
+      }
+    }
+  }
 }

@@ -146,6 +146,8 @@ trait StrictPTextFunctions {
     go(List()).map((tss: List[Text]) => Text.concat(tss.reverse))
   }
 
+  def string(s: Text): TParser[Text] = takeWith(s.length, Text.textInstance.equal(s, _))
+
   /**If at least n characters are available, return the input, else fail.*/
   def ensure(n: Int): TParser[Text] =
     Parser[Text, Text]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, Unit]#PR] {

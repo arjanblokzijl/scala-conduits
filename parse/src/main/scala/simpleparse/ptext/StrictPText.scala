@@ -143,7 +143,7 @@ trait StrictPTextFunctions {
                               if (input) go(h :: acc) else Parser.returnP(h :: acc)})
                             else Parser.returnP(h :: acc))
       })
-    go(List()).map((tss: List[Text]) => tss.reverse.foldLeft(Text.empty)((a, b) => a.append(b)))
+    go(List()).map((tss: List[Text]) => Text.concat(tss.reverse))
   }
 
   /**If at least n characters are available, return the input, else fail.*/

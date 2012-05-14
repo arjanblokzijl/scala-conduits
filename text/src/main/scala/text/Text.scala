@@ -44,7 +44,7 @@ trait TextFunctions {
 
   def singleton(c: Char): Text = new Text(Array(c))
 
-  def concat(tss: Stream[Text]): Text =
+  def concat(tss: Seq[Text]): Text =
     tss.foldLeft[Text](empty)((t1, t2) => t1 append t2)
 
   def pack(s: String) = new Text(s.toCharArray)

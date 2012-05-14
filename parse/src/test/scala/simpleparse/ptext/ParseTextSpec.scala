@@ -8,6 +8,7 @@ import simpleparse.ptext.LazyPText._
 import LText._
 import Text._
 import org.specs2.ScalaCheck
+import ptext.PTextResult.{Fail, Done}
 
 /**
  * User: arjan
@@ -28,13 +29,24 @@ class ParseTextSpec extends Specification with ScalaCheck {
     actual must be_==(expected)
   }
 
+  "takeWhile" ! check {(w: Char, chars: Array[Char]) =>
+    val (h, t) = Text.fromChars(chars).span(_ == w)
+    val actual: PTextResult[Text] = defP(takeWhile(_ == w))(fromStrict(fromChars(chars)))
+    actual match {
+      case Done(leftOver, res) => {
+        (leftOver.toStrict mustEqual(t)) and (res.headOption.getOrElse(Text.empty) mustEqual(h))
+      }
+      case _ => failure
+    }
+    success
+  }
+
 
   "skip" should {
     "skip the given character" in {
       val text = Text.fromChars("aabcabcdefc")
       val result = maybeP(skip(_ == 'a').flatMap(_ => takeRest))(fromStrict(text))
       result must be_==(Some(List(Text.fromChars("abcabcdefc"))))
-      success
     }
     "return none if text does not start with the given character" in {
       val text = Text.fromChars("baaacabcdefc")
@@ -46,8 +58,26 @@ class ParseTextSpec extends Specification with ScalaCheck {
       val text = Text.fromChars("aaaabcabcdefc")
       val result = maybeP(skipWhile(_ == 'a').flatMap(_ => takeRest))(fromStrict(text))
       result must be_==(Some(List(Text.fromChars("bcabcdefc"))))
-      success
     }
-
   }
+//  "takeWhile" should {
+//    "take while the predicate holds" in {
+//      val text = Text.fromChars("aabbbcabcdefc")
+//      val (h1, t1) = text.span(c => c == 'a' || c == 'b')
+//      val result = defP(takeWhile(c => c == 'a' || c == 'b'))(fromStrict(text))
+//      result match {
+//        case Done(h, t) => (h.toStrict mustEqual(t1)) and (t mustEqual(h1))
+//        case _ => failure
+//      }
+//      success
+//    }
+//    "return input if condition does not hold" in {
+//      val text = Text.fromChars("aabbbcabcdefc")
+//      val result = defP(takeWhile(c => c == 'b' ))(fromStrict(text))
+//      result match {
+//        case Done(h, t) => (h.toStrict mustEqual(text)) and (t must beEmpty)
+//        case _ => failure("should return Done")
+//      }
+//    }
+//  }
 }

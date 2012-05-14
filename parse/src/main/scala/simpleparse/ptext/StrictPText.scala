@@ -139,13 +139,13 @@ trait StrictPTextFunctions {
     def go(acc: List[Text]): TParser[List[Text]] =
       get.flatMap(text => {
         val (h, t) = text.span(p)
-        put(t).flatMap(_ => if (t.isEmpty) wantInput.flatMap(input => {
+        put(t).flatMap(_ => if (t.isEmpty && !h.isEmpty) wantInput.flatMap(input => {
                               if (input) go(h :: acc) else Parser.returnP(h :: acc)})
                             else Parser.returnP(h :: acc))
       })
-    go(List()).map((tss: List[Text]) => tss.reverse.foldRight(Text.empty)((a, b) => a.append(b)))
+    go(List()).map((tss: List[Text]) => tss.reverse.foldLeft(Text.empty)((a, b) => a.append(b)))
   }
-  
+
   /**If at least n characters are available, return the input, else fail.*/
   def ensure(n: Int): TParser[Text] =
     Parser[Text, Text]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, Unit]#PR] {

@@ -37,20 +37,35 @@ class ParseTextSpec extends Specification with ScalaCheck {
   }
 
   "take" ! check {(i: Int, chars: Array[Char]) =>
-    val p = take(i)
-    val actual: Option[Text] = maybeP(p)(fromStrict(fromChars(chars)))
+    val actual: Option[Text] = maybeP(take(i))(fromStrict(fromChars(chars)))
     val expected = if (i > chars.length) None else Some(new Text(chars.take(i)))
     actual must be_==(expected)
+  }
+
+  "skip" ! check {(w: Char, chars: Array[Char]) =>
+    val actual = maybeP(skip(_ == w).flatMap(_ => takeRest))(fromStrict(fromChars(chars)))
+    val expected = if (chars.isEmpty || chars.head != w) None else Some(new Text(chars.tail))
+    actual must be_==(expected)
+  }
+
+  "skipWhile" ! check {(w: Char, chars: Array[Char]) =>
+    val actual = defP(skipWhile(_ <= w))(fromStrict(fromChars(chars)))
+    val expected = new Text(chars.dropWhile(_ <= w))
+    actual match {
+      case Done(rest, ()) => rest.toStrict mustEqual(expected)
+      case _ => failure("must return Done")
+    }
+    success
   }
 
   "takeWhile" ! check {(w: Char, chars: Array[Char]) =>
     val (h, t) = Text.fromChars(chars).span(_ == w)
     val actual: PTextResult[Text] = defP(takeWhile(_ == w))(fromStrict(fromChars(chars)))
     actual match {
-      case Done(leftOver, res) => {
-        (leftOver.toStrict mustEqual(t)) and (res.headOption.getOrElse(Text.empty) mustEqual(h))
+      case Done(rest, res) => {
+        (rest.toStrict mustEqual(t)) and (res.headOption.getOrElse(Text.empty) mustEqual(h))
       }
-      case _ => failure
+      case _ => failure("must return Done")
     }
     success
   }

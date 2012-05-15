@@ -125,6 +125,7 @@ trait StrictPTextFunctions {
       else fail("skip")
     )
 
+  /**Skip past the input a long as the given predicate is true.*/
   def skipWhile(p: Char => Boolean): TParser[Unit] = {
     def go: TParser[Unit] = get.flatMap(text => {
       val t = text.dropWhile(p)

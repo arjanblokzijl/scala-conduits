@@ -58,22 +58,33 @@ class ParseTextSpec extends Specification with ScalaCheck {
   }
 
   "takeWhile" ! check {(w: Char, chars: Array[Char]) =>
-    val (h, t) = Text.fromChars(chars).span(_ == w)
-    val actual: PTextResult[Text] = defP(takeWhile(_ == w))(fromStrict(fromChars(chars)))
+    val (h, t) = Text.fromChars(chars).span(_ <= w)
+    val actual: PTextResult[Text] = defP(takeWhile(_ <= w))(fromStrict(fromChars(chars)))
     actual match {
       case Done(rest, res) => {
-        (rest.toStrict mustEqual(t)) and (res.headOption.getOrElse(Text.empty) mustEqual(h))
+        (rest.toStrict mustEqual(t)) and (res mustEqual(h))
       }
       case _ => failure("must return Done")
     }
   }
+
+  "takeTill" ! check {(w: Char, chars: Array[Char]) =>
+    val (h, t) = Text.fromChars(chars).break(_ <= w)
+    val actual: PTextResult[Text] = defP(takeTill(_ <= w))(fromStrict(fromChars(chars)))
+    actual match {
+      case Done(rest, res) => {
+        (rest.toStrict mustEqual(t)) and (res mustEqual(h))
+      }
+      case _ => failure("must return Done")
+    }
+  }
+
   "endOfInput" ! check {(chars: Array[Char]) =>
     val t = Text.fromChars(chars)
     val actual = maybeP(endOfInput)(fromStrict(fromChars(chars)))
     if (t.isEmpty) actual must be_==(Some(()))
     else actual must beNone
   }
-
 
   "skip" should {
     "skip the given character" in {

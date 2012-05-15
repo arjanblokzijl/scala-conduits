@@ -136,6 +136,11 @@ trait StrictPTextFunctions {
     go
   }
 
+  /**
+   * Consume input as long as the given predicate returns true.
+   * This parser does not fail: It returns an empty string if the predicate
+   * returns false on the first character of the input.
+   */
   def takeWhile(p: Char => Boolean): TParser[Text] = {
     def go(acc: List[Text]): TParser[List[Text]] =
       get.flatMap(text => {
@@ -146,6 +151,14 @@ trait StrictPTextFunctions {
       })
     go(List()).map((tss: List[Text]) => Text.concat(tss.reverse))
   }
+
+  /**
+   * Consume input as long as the given predicate returns false.
+   * This parser does not fail: It returns an empty string if the predicate
+   * returns true on the first character of the input.
+   */
+  def takeTill(p: Char => Boolean): TParser[Text] =
+    takeWhile(!p(_))
 
   def string(s: Text): TParser[Text] = takeWith(s.length, Text.textInstance.equal(s, _))
 

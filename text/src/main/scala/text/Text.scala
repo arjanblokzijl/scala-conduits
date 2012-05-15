@@ -35,6 +35,12 @@ final class Text(chars: Array[Char]) extends IndexedSeq[Char] with IndexedSeqOpt
 
   def &:(c: Char): Text = cons(c, this)
 
+  /**
+   * `break` is like span, but the prefix returned
+   * contains the elements for which the given predicate returns false.
+   */
+  def break(p: Char => Boolean) = span(!p(_))
+
   override def toString: String = new String(toArray)
 }
 

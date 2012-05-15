@@ -189,4 +189,22 @@ trait StrictPTextFunctions {
            }
          }
       })
+
+  def endOfInput: TParser[Unit] = {
+    import Parser.addS
+    Parser[Text, Unit]((i0, a0, m0, kf, ks) => new Forall[TParser[Unit]#PR] {
+      def apply[A] =
+        if (!i0.unI.isEmpty) kf.apply(i0, a0, m0, Stream(), "endOfInput")
+        else m0 match {
+          case Complete => ks.apply(i0, a0, m0, ())
+          case Incomplete => demandInput.runParser(i0, a0, m0,
+            new Forall[TParser[Unit]#FA] {
+              def apply[A] = (i1, a1, m1, str, s) => addS(i0, a0, m0)(i1, a1, m1)((i2, a2, m2) => ks.apply(i2, a2, m2, ()))
+            },
+            new Forall[TParser[Unit]#SA] {
+              def apply[A] = (i1, a1, m1, b) => addS(i0, a0, m0)(i1, a1, m1)((i2, a2, m2) => kf.apply(i2, a2, m2, Stream(), "endOfInput"))
+            }).apply[A]
+        }
+    })
+  }
 }

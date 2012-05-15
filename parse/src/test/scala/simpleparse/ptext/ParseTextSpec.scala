@@ -55,7 +55,6 @@ class ParseTextSpec extends Specification with ScalaCheck {
       case Done(rest, ()) => rest.toStrict mustEqual(expected)
       case _ => failure("must return Done")
     }
-    success
   }
 
   "takeWhile" ! check {(w: Char, chars: Array[Char]) =>
@@ -67,7 +66,12 @@ class ParseTextSpec extends Specification with ScalaCheck {
       }
       case _ => failure("must return Done")
     }
-    success
+  }
+  "endOfInput" ! check {(chars: Array[Char]) =>
+    val t = Text.fromChars(chars)
+    val actual = maybeP(endOfInput)(fromStrict(fromChars(chars)))
+    if (t.isEmpty) actual must be_==(Some(()))
+    else actual must beNone
   }
 
 

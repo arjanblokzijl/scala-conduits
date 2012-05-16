@@ -4,7 +4,7 @@ package simpleparse
  * User: arjan
  */
 import ParseResult._
-import scalaz.{Monoid, Monad, Functor, Forall}
+import scalaz.{Monoid, Monad, MonadPlus, Functor, Forall}
 
 sealed trait ParseResult[T, A] {
   def fold[Z](done: (=> T, => A)=> Z, partial: (=> T => ParseResult[T, A]) => Z, fail: (=> T, => Stream[String], => String) => Z): Z
@@ -46,7 +46,6 @@ object ParseResult {
     def unapply[T, A](pr: ParseResult[T, A]): Option[(T, Stream[String], String)] = pr.fold(ToNone2, ToNone1, (t, st, s) => Some(t, st, s))
   }
 
-//  type Failure[T, R] = Input[T] => Added[T] => More => Stream[String] => String => ParseResult[T, R]
   type Failure[T, R] = (Input[T], Added[T], More, Stream[String], String) => ParseResult[T, R]
   type Success[T, B, R] = (Input[T], Added[T], More, B) => ParseResult[T, R]
 }
@@ -72,6 +71,8 @@ trait Parser[T, A] {
 
   def runParser(i: Input[T], a: Added[T], m: More, kf: Forall[FA], ks: Forall[({type l[r] = Success[T, A, r]})#l]): Forall[PR]
 
+  //simpler map, but writing it out seems a bit more efficient.
+  //def map[B](f: A => B): Parser[T, B] = flatMap(a => Parser.returnP(f(a)))
   def map[B](f: A => B): Parser[T, B] = Parser[T, B]((i0, a0, m0, kf0, k) => {
     runParser(i0, a0, m0, kf0, new Forall[SA] {
       def apply[C] = (i1: Input[T], a1: Added[T], s1: More, a: A) =>
@@ -86,6 +87,12 @@ trait Parser[T, A] {
     })
   )
 
+  /**
+   * `plus` combines this parser with the supplied one.
+   * This combinator implies choice: If this parser fails
+   * without consuming any input, the second parser is tried.
+   * This combinator is defined equal to `plus` of the [[scalaz.MonadPlus]] instance.
+   */
   def plus(b: Parser[T, A])(implicit M: Monoid[T]): Parser[T, A] = {
     Parser((i0, a0, m0, kf, ks) => {
       noAdds(i0, a0, m0)((i1, a1, m1) => runParser(i1, a1, m1, new Forall[FA] {
@@ -94,6 +101,24 @@ trait Parser[T, A] {
           }, ks))
     })
   }
+
+  /**alias for `plus`.*/
+  def <|>(b: Parser[T, A])(implicit M: Monoid[T]): Parser[T, A] = plus(b)
+
+  /**
+   * `option` tries to apply this parser. If parsing fails without
+   * consuming input, it returns the value `x`, otherwise the value
+   * returned by this parser.
+   */
+  def option(x: A)(implicit M: Monoid[T]): Parser[T, A] =
+    plus(Parser.returnP(x))
+
+  /**
+   * `many1` applies the action `p` one or more times. Returns
+   * a list of the returned values of `p`.
+   */
+  def many1(implicit M: Monoid[T]): Parser[T, List[A]] =
+    parserMonad[T].map2(this, parserMonad[T].many(this))((a, b) => a :: b)
 }
 
 object Parser extends ParserFunctions with ParserInstances {
@@ -101,19 +126,25 @@ object Parser extends ParserFunctions with ParserInstances {
     def runParser(i: Input[T], a: Added[T], m: More, kf: Forall[({type l[r] = Failure[T, r]})#l], ks: Forall[({type l[r] = Success[T, A, r]})#l]) = f(i, a, m, kf, ks)
   }
 }
-
-trait ParserInstances {
-  implicit def parserMonad[F]: Monad[({type l[r] = Parser[F, r]})#l] = new Monad[({type l[r] = Parser[F, r]})#l] {
-    def bind[A, B](fa: Parser[F, A])(f: (A) => Parser[F, B]) = fa flatMap f
-
-    def point[A](a: => A) = Parser.returnP(a)
-  }
+trait ParserInstances0 {
 
   implicit def parserMonoid[F, A](implicit M: Monoid[F]): Monoid[Parser[F, A]] = new Monoid[Parser[F, A]] {
     def append(f1: Parser[F, A], f2: => Parser[F, A]) = f1 plus f2
 
     def zero = failDesc("Monoid: zero")
   }
+}
+trait ParserInstances extends ParserInstances0 {
+  implicit def parserMonad[F](implicit M: Monoid[F]): MonadPlus[({type l[r] = Parser[F, r]})#l] = new MonadPlus[({type l[r] = Parser[F, r]})#l] {
+    def bind[A, B](fa: Parser[F, A])(f: (A) => Parser[F, B]) = fa flatMap f
+
+    def point[A](a: => A) = Parser.returnP(a)
+
+    def plus[A](a: Parser[F, A], b: => Parser[F, A]) = a plus b
+
+    def empty[A] = failDesc("Monoid: zero")
+  }
+
 }
 
 trait ParserFunctions {
@@ -140,4 +171,14 @@ trait ParserFunctions {
         def apply[A] = _kf.apply(i0, a0, m0, Stream.empty[String], "Failed reading: " + err)
     })
   }
+
+  /**
+   * `choice` tries to apply the actions in the given list in order,
+   * until one of them succeeds. Returns the value of the succeeding
+   * action.
+   */
+  def choice[F, A](ps: Seq[Parser[F, A]])(implicit F: Monoid[F]): Parser[F, A] =
+    ps.foldLeft(Monoid[Parser[F, A]].zero)((a, b) => a plus b)
+
+
 }

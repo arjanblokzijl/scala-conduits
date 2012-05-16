@@ -8,9 +8,7 @@ import simpleparse.{Parser => P}
 import simpleparse.ParseResult.Partial
 import scalaz.{DList, Forall}
 
-object StrictPText extends StrictPTextFunctions {
-
-}
+object StrictPText extends StrictPTextFunctions
 
 trait StrictPTextFunctions {
   type TParser[A] = Parser[Text, A]

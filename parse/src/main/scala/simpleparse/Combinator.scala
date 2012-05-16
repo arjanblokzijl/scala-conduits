@@ -31,4 +31,14 @@ trait CombinatorFunctions {
   def many1[F[_], A](p: F[A])(implicit F: ApplicativePlus[F]): F[List[A]] =
      F.map2(p, F.many(p))((a, b) => a :: b)
 
+  def sepBy1[F[_], A, S](p: F[A], s: F[S])(implicit F: ApplicativePlus[F]): F[List[A]] = {
+    def scan: F[List[A]] =
+      F.map2(p, F.plus(F.map2(s, scan)((_, b) => b), F.point(List[A]())))((a, b) => a :: b)
+
+    scan
+  }
+
+  def sepBy[F[_], A, S](p: F[A], s: F[S])(implicit F: ApplicativePlus[F]): F[List[A]] =
+      F.map2(p, F.plus(F.plus(F.map2(s, sepBy1(p, s))((_, b) => b), F.point(List[A]())), F.point(List[A]())))((a, b) => a :: b)
+
 }

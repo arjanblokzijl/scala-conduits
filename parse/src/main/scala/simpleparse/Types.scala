@@ -118,14 +118,66 @@ trait Parser[T, A] {
    * a list of the returned values of `p`.
    */
   def many1(implicit M: Monoid[T]): Parser[T, List[A]] =
-    parserMonad[T].map2(this, parserMonad[T].many(this))((a, b) => a :: b)
+    parserMonad[T].map2(this, parserMonad[T].many(this))(_ :: _)
+
+  def sepBy1[S](s: Parser[T, S])(implicit M: Monoid[T]): Parser[T, List[A]] = {
+    def scan: Parser[T, List[A]] =
+      parserMonad[T].map2(this, s *> scan <|> returnP(List[A]()))(_ :: _)
+
+    scan
+  }
+
+  def sepBy[S](s: Parser[T, S])(implicit M: Monoid[T]): Parser[T, List[A]] =
+    parserMonad[T].map2(this, s *> sepBy1(s) <|> returnP(List[A]()) <|> returnP(List[A]()))(_ :: _)
+
+  /**
+   * `manyTill` applies the parser zero or more times until
+   * parser `end` succeeds, and returns the list of values returned by this parser.
+   */
+  def manyTill[B](end: Parser[T, B])(implicit M: Monoid[T]): Parser[T, List[A]] = {
+    def scan: Parser[T, List[A]] = end *> returnP(List[A]()) <|> pm[T].map2(this, scan)(_ :: _)
+    scan
+  }
+
+  /**
+   * Skip zero or more instances of an action.
+   */
+  def skipMany(implicit M: Monoid[T]): Parser[T, Unit] = {
+    def scan: Parser[T, Unit] = this *> scan <|> returnP(())
+    scan
+  }
+
+  /**
+   * Skip one or more instances of an action.
+   */
+  def skipMany1(implicit M: Monoid[T]): Parser[T, Unit] =
+    this *> skipMany
+
+  /**
+   * Apply the parser repeatedly, returning every result.
+   */
+  def count(i: Int): Parser[T, Stream[A]] = {
+    def go(n: Int, acc: Parser[T, Stream[A]]): Parser[T, Stream[A]] =
+      if (n <= 0) acc
+      else acc flatMap(_ => go(n - 1, acc))
+
+    go(i, returnP(Stream[A]()))
+  }
+
+  //There is syntax for this in Scalaz as well, but don't want to use this in the implementation.
+  def *>[B](p: Parser[T, B])(implicit M: Monoid[T]) =  parserMonad[T].map2(this, p)((_, b) => b)
+
 }
 
 object Parser extends ParserFunctions with ParserInstances {
+  def pm[T](implicit M: Monoid[T]) = parserMonad[T]
   def apply[T, A](f: (Input[T], Added[T], More, Forall[Parser[T, A]#FA], Forall[Parser[T, A]#SA]) => Forall[Parser[T, A]#PR]) = new Parser[T, A] {
     def runParser(i: Input[T], a: Added[T], m: More, kf: Forall[({type l[r] = Failure[T, r]})#l], ks: Forall[({type l[r] = Success[T, A, r]})#l]) = f(i, a, m, kf, ks)
   }
+
+  object parserSyntax extends scalaz.syntax.ToMonadPlusV
 }
+
 trait ParserInstances0 {
 
   implicit def parserMonoid[F, A](implicit M: Monoid[F]): Monoid[Parser[F, A]] = new Monoid[Parser[F, A]] {

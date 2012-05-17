@@ -164,6 +164,13 @@ trait Parser[T, A] {
     go(i, returnP(Stream[A]()))
   }
 
+  /** Combine two alternatives.*/
+  def eitherP[B](p : Parser[T, B])(implicit M: Monoid[T]): Parser[T, Either[A, B]] = {
+    def left(a: A): Either[A, B] = Left(a)
+    def right(b: B): Either[A, B] = Right(b)
+    this.map(left(_)) <|> p.map(right(_))
+  }
+
   //There is syntax for this in Scalaz as well, but don't want to use this in the implementation.
   def *>[B](p: Parser[T, B])(implicit M: Monoid[T]) =  parserMonad[T].map2(this, p)((_, b) => b)
 

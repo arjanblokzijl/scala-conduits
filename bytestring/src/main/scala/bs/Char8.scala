@@ -1,8 +1,6 @@
 package bs
 
-/**
- * User: arjan
- */
+
 /**
  * Utility to manipulate 'ByteString's using 'Char' operations. All Chars will be
  * truncated to 8 bits.

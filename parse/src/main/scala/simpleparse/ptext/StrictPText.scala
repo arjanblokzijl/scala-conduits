@@ -52,6 +52,17 @@ trait StrictPTextFunctions {
   /**Match any character, except the given one.*/
   def notChar(c: Char): TParser[Char] = label(satisfy(_ != c), "not " + c)
 
+  /**Match any character, except the given ones.*/
+  def noneOf(cs: Seq[Char]): TParser[Char] =
+    label(satisfy(c => !cs.contains(c)), "noneOf " + cs)
+
+  /**
+   * Math either a single newline character `\n` or a
+   * carriage return followed by a newline character `\r\n`.
+   */
+   def endOfLine: TParser[Unit] =
+     char('\n').map(_ => ()) <|> (string(Text.fromChars("\r\n")).map(_ => ()))
+
   /**
    * The parser `satisfy p` succeeds for any character for which the
    * predicate `p` returns 'True'. Returns the character that is

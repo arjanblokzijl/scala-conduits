@@ -4,7 +4,9 @@ package simpleparse
  * User: arjan
  */
 import ParseResult._
-import scalaz.{Monoid, Monad, MonadPlus, Functor, Forall}
+import scalaz.{Monoid, MonadPlus, Functor, Forall}
+import scalaz.Free._
+import scalaz.std.function._
 
 sealed trait ParseResult[T, A] {
   def fold[Z](done: (=> T, => A)=> Z, partial: (=> T => ParseResult[T, A]) => Z, fail: (=> T, => Stream[String], => String) => Z): Z
@@ -117,18 +119,35 @@ trait Parser[T, A] {
    * `many1` applies the action `p` one or more times. Returns
    * a list of the returned values of `p`.
    */
-  def many1(implicit M: Monoid[T]): Parser[T, List[A]] =
-    parserMonad[T].map2(this, parserMonad[T].many(this))(_ :: _)
+  def many1(implicit M: Monoid[T]): Parser[T, Stream[A]] =
+    for {
+      a <- this
+      b <- many
+    } yield a #:: b
 
-  def sepBy1[S](s: Parser[T, S])(implicit M: Monoid[T]): Parser[T, List[A]] = {
-    def scan: Parser[T, List[A]] =
-      parserMonad[T].map2(this, s *> scan <|> returnP(List[A]()))(_ :: _)
+  /**
+   * `many` applies the action `p` zero or more times. Returns
+   * a list of the returned values of `p`.
+   */
+  def many(implicit M: Monoid[T]): Parser[T, Stream[A]] =
+    many1 <|> returnP[T, Stream[A]](Stream())
+
+  def sepBy1[S](s: Parser[T, S])(implicit M: Monoid[T]): Parser[T, Stream[A]] = {
+    def scan: Parser[T, Stream[A]] =
+      flatMap(a => s *> scan <|> returnP(Stream[A]()).map(s => a #:: s))
 
     scan
   }
 
-  def sepBy[S](s: Parser[T, S])(implicit M: Monoid[T]): Parser[T, List[A]] =
-    parserMonad[T].map2(this, s *> sepBy1(s) <|> returnP(List[A]()) <|> returnP(List[A]()))(_ :: _)
+  def sepBy[S](s: Parser[T, S])(implicit M: Monoid[T]): Parser[T, Stream[A]] =
+    for {
+      a <- this
+      st <- (s *> sepBy1(s) <|> returnP(Stream[A]()))
+    } yield a #:: st
+
+
+  def endBy[S](s: Parser[T, S])(implicit M: Monoid[T]): Parser[T, Stream[A]] =
+    (this <* s) many1
 
   /**
    * `manyTill` applies the parser zero or more times until
@@ -171,8 +190,18 @@ trait Parser[T, A] {
     this.map(left(_)) <|> p.map(right(_))
   }
 
-  //There is syntax for this in Scalaz as well, but don't want to use this in the implementation.
-  def *>[B](p: Parser[T, B])(implicit M: Monoid[T]) =  parserMonad[T].map2(this, p)((_, b) => b)
+  def *>[B](p: Parser[T, B])(implicit M: Monoid[T]): Parser[T, B] =
+    for {
+      _ <- this
+      a <- p
+    } yield a
+
+
+  def <*[B](p: Parser[T, B])(implicit M: Monoid[T]): Parser[T, A] =
+    for {
+      a <- this
+      _ <- p
+    } yield a
 
 }
 
@@ -193,6 +222,7 @@ trait ParserInstances0 {
     def zero = failDesc("Monoid: zero")
   }
 }
+
 trait ParserInstances extends ParserInstances0 {
   implicit def parserMonad[F](implicit M: Monoid[F]): MonadPlus[({type l[r] = Parser[F, r]})#l] = new MonadPlus[({type l[r] = Parser[F, r]})#l] {
     def bind[A, B](fa: Parser[F, A])(f: (A) => Parser[F, B]) = fa flatMap f

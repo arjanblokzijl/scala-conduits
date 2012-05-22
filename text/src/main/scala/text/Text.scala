@@ -70,8 +70,6 @@ trait TextFunctions {
 
   def fromChars(s: Seq[Char]): Text = new Text(s.toArray)
 
-  def fromIterator(i: Iterator[Char]): Text = new Text(i.toArray)
-
   def fromByteBuffer(bytes: java.nio.ByteBuffer, size: Int = DefaultChunkSize): Text = {
     bytes.rewind()
     val ar = new Array[Char](size)

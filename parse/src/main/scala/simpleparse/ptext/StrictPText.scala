@@ -29,7 +29,7 @@ trait StrictPTextFunctions {
        new Forall[TParser[A]#SA] {
          //TODO can this be ever unsafe?
          def apply[A] = (i0, _a0, _m0, a) => PR.Done[Text, A](i0.unI, a.asInstanceOf[A])
-       }).apply[A]
+       }).run.apply[A]
 
   /**Alias for `label`.*/
   def ?[A](p: TParser[A], msg0: String): TParser[A] = label(p, msg0)
@@ -39,7 +39,7 @@ trait StrictPTextFunctions {
     Parser[Text, A]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, A]#PR] {
       def apply[A] = p.runParser(i0, a0, m0, new Forall[Parser[Text, A]#FA] {
         def apply[A] = (i, a, m, strs, msg1) => kf.apply(i, a, m, msg #:: strs, msg1)
-      }, ks).apply[A]
+      }, ks).run.apply[A]
     })
   }
 
@@ -51,6 +51,17 @@ trait StrictPTextFunctions {
 
   /**Match any character, except the given one.*/
   def notChar(c: Char): TParser[Char] = label(satisfy(_ != c), "not " + c)
+
+  /**Match any character, except the given ones.*/
+  def noneOf(cs: Seq[Char]): TParser[Char] =
+    label(satisfy(c => !cs.contains(c)), "noneOf " + cs)
+
+  /**
+   * Math either a single newline character `\n` or a
+   * carriage return followed by a newline character `\r\n`.
+   */
+   def endOfLine: TParser[Unit] =
+     char('\n').map(_ => ()) <|> (string(Text.fromChars("\r\n")).map(_ => ()))
 
   /**
    * The parser `satisfy p` succeeds for any character for which the
@@ -160,12 +171,15 @@ trait StrictPTextFunctions {
 
   def string(s: Text): TParser[Text] = takeWith(s.length, Text.textInstance.equal(s, _))
 
+  import Parser._
+  import scalaz.Free._
+  import scalaz.std.function._
   /**If at least n characters are available, return the input, else fail.*/
   def ensure(n: Int): TParser[Text] =
-    Parser[Text, Text]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, Unit]#PR] {
+    parser[Text, Text]((i0, a0, m0, kf, ks) => return_(new Forall[Parser[Text, Unit]#PR] {
       def apply[A] = if (i0.unI.length >= n) ks.apply(i0, a0, m0, i0.unI)
-                     else demandInput.flatMap(_ => ensure(n)).runParser(i0, a0, m0, kf, ks).apply[A]
-    })
+                     else demandInput.flatMap(_ => ensure(n)).runParser(i0, a0, m0, kf, ks).run.apply[A]
+    }))
 
 
   /**Ask for input. If we receive any, pass it to a success continuation, otherwise to a failure continuation.*/
@@ -203,7 +217,7 @@ trait StrictPTextFunctions {
 
   def endOfInput: TParser[Unit] = {
     import Parser.addS
-    Parser[Text, Unit]((i0, a0, m0, kf, ks) => new Forall[TParser[Unit]#PR] {
+    parser[Text, Unit]((i0, a0, m0, kf, ks) => return_(new Forall[TParser[Unit]#PR] {
       def apply[A] =
         if (!i0.unI.isEmpty) kf.apply(i0, a0, m0, Stream(), "endOfInput")
         else m0 match {
@@ -214,8 +228,8 @@ trait StrictPTextFunctions {
             },
             new Forall[TParser[Unit]#SA] {
               def apply[A] = (i1, a1, m1, b) => addS(i0, a0, m0)(i1, a1, m1)((i2, a2, m2) => kf.apply(i2, a2, m2, Stream(), "endOfInput"))
-            }).apply[A]
+            }).run.apply[A]
         }
-    })
+    }))
   }
 }

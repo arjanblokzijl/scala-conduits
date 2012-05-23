@@ -4,7 +4,9 @@ package simpleparse
  * User: arjan
  */
 import ParseResult._
-import scalaz.{Monoid, Monad, MonadPlus, Functor, Forall}
+import scalaz.{Monoid, MonadPlus, Functor, Forall}
+import scalaz.Free._
+import scalaz.std.function._
 
 sealed trait ParseResult[T, A] {
   def fold[Z](done: (=> T, => A)=> Z, partial: (=> T => ParseResult[T, A]) => Z, fail: (=> T, => Stream[String], => String) => Z): Z
@@ -69,21 +71,21 @@ trait Parser[T, A] {
   type SA[R] = Success[T, A, R]
   type PR[R] = ParseResult[T, R]
 
-  def runParser(i: Input[T], a: Added[T], m: More, kf: Forall[FA], ks: Forall[({type l[r] = Success[T, A, r]})#l]): Forall[PR]
+  def runParser(i: Input[T], a: Added[T], m: More, kf: Forall[FA], ks: Forall[SA]): Trampoline[Forall[PR]]
 
   //simpler map, but writing it out seems a bit more efficient.
   //def map[B](f: A => B): Parser[T, B] = flatMap(a => Parser.returnP(f(a)))
-  def map[B](f: A => B): Parser[T, B] = Parser[T, B]((i0, a0, m0, kf0, k) => {
+  def map[B](f: A => B): Parser[T, B] = parser[T, B]((i0, a0, m0, kf0, k) => {
     runParser(i0, a0, m0, kf0, new Forall[SA] {
       def apply[C] = (i1: Input[T], a1: Added[T], s1: More, a: A) =>
         k.apply(i1, a1, s1, f(a))
      })
   })
 
-  def flatMap[B](f: A => Parser[T, B]): Parser[T, B] = Parser[T, B]((i0, a0, m0, kf, ks) =>
+  def flatMap[B](f: A => Parser[T, B]): Parser[T, B] = parser[T, B]((i0, a0, m0, kf, ks) =>
     runParser(i0, a0, m0, kf, new Forall[SA] {
       def apply[C] = (i1: Input[T], a1: Added[T], m1: More, a: A) =>
-        f(a).runParser(i1, a1, m1, kf, ks).apply[C]
+        f(a).runParser(i1, a1, m1, kf, ks).run.apply[C]
     })
   )
 
@@ -94,10 +96,10 @@ trait Parser[T, A] {
    * This combinator is defined equal to `plus` of the [[scalaz.MonadPlus]] instance.
    */
   def plus(b: Parser[T, A])(implicit M: Monoid[T]): Parser[T, A] = {
-    Parser((i0, a0, m0, kf, ks) => {
+    parser((i0, a0, m0, kf, ks) => {
       noAdds(i0, a0, m0)((i1, a1, m1) => runParser(i1, a1, m1, new Forall[FA] {
          def apply[A] = (i1: Input[T], a1: Added[T], m1: More, str: Stream[String], s: String) =>
-           addS[T, PR[A]](i0, a0, m0)(i1, a1, m1)((i2, a2, m2) => b.runParser(i2, a2, m2, kf, ks).apply[A])
+           addS[T, PR[A]](i0, a0, m0)(i1, a1, m1)((i2, a2, m2) => b.runParser(i2, a2, m2, kf, ks).run.apply[A])
           }, ks))
     })
   }
@@ -117,18 +119,35 @@ trait Parser[T, A] {
    * `many1` applies the action `p` one or more times. Returns
    * a list of the returned values of `p`.
    */
-  def many1(implicit M: Monoid[T]): Parser[T, List[A]] =
-    parserMonad[T].map2(this, parserMonad[T].many(this))(_ :: _)
+  def many1(implicit M: Monoid[T]): Parser[T, Stream[A]] =
+    for {
+      a <- this
+      b <- many
+    } yield a #:: b
 
-  def sepBy1[S](s: Parser[T, S])(implicit M: Monoid[T]): Parser[T, List[A]] = {
-    def scan: Parser[T, List[A]] =
-      parserMonad[T].map2(this, s *> scan <|> returnP(List[A]()))(_ :: _)
+  /**
+   * `many` applies the action `p` zero or more times. Returns
+   * a list of the returned values of `p`.
+   */
+  def many(implicit M: Monoid[T]): Parser[T, Stream[A]] =
+   many1 <|> returnP[T, Stream[A]](Stream())
+
+  def sepBy1[S](s: Parser[T, S])(implicit M: Monoid[T]): Parser[T, Stream[A]] = {
+    def scan: Parser[T, Stream[A]] =
+      flatMap(a => s *> scan <|> returnP(Stream[A]()).map(s => a #:: s))
 
     scan
   }
 
-  def sepBy[S](s: Parser[T, S])(implicit M: Monoid[T]): Parser[T, List[A]] =
-    parserMonad[T].map2(this, s *> sepBy1(s) <|> returnP(List[A]()) <|> returnP(List[A]()))(_ :: _)
+  def sepBy[S](s: Parser[T, S])(implicit M: Monoid[T]): Parser[T, Stream[A]] =
+    for {
+      a <- this
+      st <- (s *> sepBy1(s) <|> returnP(Stream[A]()))
+    } yield a #:: st
+
+
+  def endBy[S](s: Parser[T, S])(implicit M: Monoid[T]): Parser[T, Stream[A]] =
+    (this <* s) many1
 
   /**
    * `manyTill` applies the parser zero or more times until
@@ -171,15 +190,27 @@ trait Parser[T, A] {
     this.map(left(_)) <|> p.map(right(_))
   }
 
-  //There is syntax for this in Scalaz as well, but don't want to use this in the implementation.
-  def *>[B](p: Parser[T, B])(implicit M: Monoid[T]) =  parserMonad[T].map2(this, p)((_, b) => b)
+  def *>[B](p: Parser[T, B])(implicit M: Monoid[T]): Parser[T, B] =
+    for {
+      _ <- this
+      a <- p
+    } yield a
+
+
+  def <*[B](p: Parser[T, B])(implicit M: Monoid[T]): Parser[T, A] =
+    for {
+      a <- this
+      _ <- p
+    } yield a
 
 }
 
 object Parser extends ParserFunctions with ParserInstances {
+  import scalaz.Free._
+  import scalaz.std.function._
   def pm[T](implicit M: Monoid[T]) = parserMonad[T]
   def apply[T, A](f: (Input[T], Added[T], More, Forall[Parser[T, A]#FA], Forall[Parser[T, A]#SA]) => Forall[Parser[T, A]#PR]) = new Parser[T, A] {
-    def runParser(i: Input[T], a: Added[T], m: More, kf: Forall[({type l[r] = Failure[T, r]})#l], ks: Forall[({type l[r] = Success[T, A, r]})#l]) = f(i, a, m, kf, ks)
+    def runParser(i: Input[T], a: Added[T], m: More, kf: Forall[Parser[T, A]#FA], ks: Forall[Parser[T, A]#SA]) = return_(f(i, a, m, kf, ks))
   }
 
   object parserSyntax extends scalaz.syntax.ToMonadPlusV
@@ -193,6 +224,7 @@ trait ParserInstances0 {
     def zero = failDesc("Monoid: zero")
   }
 }
+
 trait ParserInstances extends ParserInstances0 {
   implicit def parserMonad[F](implicit M: Monoid[F]): MonadPlus[({type l[r] = Parser[F, r]})#l] = new MonadPlus[({type l[r] = Parser[F, r]})#l] {
     def bind[A, B](fa: Parser[F, A])(f: (A) => Parser[F, B]) = fa flatMap f
@@ -207,13 +239,21 @@ trait ParserInstances extends ParserInstances0 {
 }
 
 trait ParserFunctions {
-  def returnP[T, A](a: => A): Parser[T, A] = Parser[T, A]((i0, a0, m0, _kf, ks) => new Forall[Parser[T, A]#PR] {
-    def apply[A] = ks.apply(i0, a0, m0, a)
-  })
+
+  def parser[T, A](f: (Input[T], Added[T], More, Forall[Parser[T, A]#FA], Forall[Parser[T, A]#SA]) => Trampoline[Forall[Parser[T, A]#PR]]) = new Parser[T, A] {
+    def runParser(i: Input[T], a: Added[T], m: More, kf: Forall[FA], ks: Forall[Parser[T, A]#SA]) = {
+      f(i, a, m, kf, ks)
+    }
+  }
+
+  def returnP[T, A](a: => A): Parser[T, A] = parser[T, A]((i0, a0, m0, _kf, ks) => return_(new Forall[Parser[T, A]#PR] {
+    def apply[A] = ks.apply[A](i0, a0, m0, a)
+  }))
 
   def addS[T, A](i0: => Input[T], a0: => Added[T], m0: => More)(_i1: => Input[T], a1: => Added[T], m1: => More)(f: (=> Input[T], => Added[T], => More) => A)(implicit M : Monoid[T]): A = {
     val i = Input(M.append(i0.unI, a1.unA))
     val a = Added(M.append(a0.unA, a1.unA))
+//    println("noAdds: input is %s, added is %s, m0 is %s, m1 is %s" format(i.unI, a.unA, m0, m1))
     val m = (m0, m1) match {
       case (Complete, _) => Complete
       case (_, Complete) => Complete
@@ -222,13 +262,17 @@ trait ParserFunctions {
     f(i, a, m)
   }
 
-  def noAdds[T, A](i0: => Input[T], a0: => Added[T], m0: => More)(f: (=> Input[T], => Added[T], => More) => A)(implicit M : Monoid[T]): A =
-    f(i0, Added(M.zero), m0)
+  def noAdds[T, A](i0: => Input[T], a0: => Added[T], m0: => More)(f: (=> Input[T], => Added[T], => More) => A)(implicit M : Monoid[T]): A = {
+//    println("noAdds: input is %s, added is %s, more is %s" format(i0.unI, a0.unA, m0))
+    val res = f(i0, Added(M.zero), m0)
+//    println("naAdds: result is " + res)
+    res
+  }
 
   def failDesc[T, A](err: String): Parser[T, A] = {
-    Parser[T, A]((i0, a0, m0, _kf, ks) => new Forall[Parser[T, A]#PR] {
-        def apply[A] = _kf.apply(i0, a0, m0, Stream.empty[String], "Failed reading: " + err)
-    })
+    parser[T, A]((i0, a0, m0, _kf, ks) => return_(new Forall[Parser[T, A]#PR] {
+      def apply[A] = _kf.apply[A](i0, a0, m0, Stream.empty[String], "Failed reading: " + err)
+    }))
   }
 
   /**
@@ -238,6 +282,4 @@ trait ParserFunctions {
    */
   def choice[F, A](ps: Seq[Parser[F, A]])(implicit F: Monoid[F]): Parser[F, A] =
     ps.foldLeft(Monoid[Parser[F, A]].zero)((a, b) => a plus b)
-
-
 }

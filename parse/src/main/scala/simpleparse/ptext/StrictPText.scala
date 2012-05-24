@@ -16,8 +16,8 @@ trait StrictPTextFunctions {
   type TResult[A] = ParseResult[Text, A]
   type TInput = Input[Text]
   type TAdded = Added[Text]
-  type TFailure[A] = PR.Failure[Text, A]
-  type TSuccess[A, R] = PR.Success[Text, A, R]
+  type TFailure[A] = PR.ParseFailure[Text, A]
+  type TSuccess[A, R] = PR.ParseSuccess[Text, A, R]
 
   def failK[A]: TFailure[A] = (s0, stack, msg) => PR.Fail(s0.input, stack, msg)
 

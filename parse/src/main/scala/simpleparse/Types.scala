@@ -51,8 +51,8 @@ object ParseResult {
   }
 
 
-  type Failure[T, R] = (ParseState[T], Stream[String], String) => ParseResult[T, R]
-  type Success[T, B, R] = (ParseState[T], B) => ParseResult[T, R]
+  type ParseFailure[T, R] = (ParseState[T], Stream[String], String) => ParseResult[T, R]
+  type ParseSuccess[T, B, R] = (ParseState[T], B) => ParseResult[T, R]
 }
 
 trait ParseResultInstances {
@@ -70,8 +70,8 @@ case object Incomplete extends More
 
 import Parser._
 trait Parser[T, A] {
-  type FA[R] = Failure[T, R]
-  type SA[R] = Success[T, A, R]
+  type FA[R] = ParseFailure[T, R]
+  type SA[R] = ParseSuccess[T, A, R]
   type PR[R] = ParseResult[T, R]
 
   def runParser(st: ParseState[T], kf: Forall[FA], ks: Forall[SA]): Trampoline[Forall[PR]]

@@ -7,6 +7,8 @@ import simpleparse.{ParseResult => PR}
 import simpleparse.{Parser => P}
 import simpleparse.ParseResult.Partial
 import scalaz.{DList, Forall}
+import Parser._
+import ParseResult._
 
 object StrictPText extends StrictPTextFunctions
 
@@ -15,32 +17,23 @@ trait StrictPTextFunctions {
   type TResult[A] = ParseResult[Text, A]
   type TInput = Input[Text]
   type TAdded = Added[Text]
-  type TFailure[A] = PR.Failure[Text, A]
-  type TSuccess[A, R] = PR.Success[Text, A, R]
+  type TFailure[A] = PR.PFailure[Text, A]
+  type TSuccess[A, R] = PR.PSuccess[Text, A, R]
 
-  def failK[A]: TFailure[A] = (i0, _a0, _m0, stack, msg) => PR.Fail(i0.unI, stack, msg)
+  def failK[A]: PFailure[Text, A] = (s0, stack, msg) => Fail(s0.input, stack, msg)
 
-  def successK[A]: TSuccess[A, A] = (i0, _a0, _m0, a) => PR.Done[Text, A](i0.unI, a)
+  def successK[A]: PSuccess[Text, A, A] = (s0, a) => Done[Text, A](s0.input, a)
 
-  def parse[A](p: TParser[A], s: Text): TResult[A] = p.runParser(Input(s), Added(Text.empty), Incomplete,
-       new Forall[TParser[A]#FA] {
-         def apply[A] = failK[A]
-       },
-       new Forall[TParser[A]#SA] {
-         //TODO can this be ever unsafe?
-         def apply[A] = (i0, _a0, _m0, a) => PR.Done[Text, A](i0.unI, a.asInstanceOf[A])
-       }).apply[A]
+  def parse[A](p: TParser[A], s: Text): TResult[A] =
+    p(ParseState(s, Text.empty, Incomplete), failK[A], (s0, a) => Done[Text, A](s0.input, a))
 
   /**Alias for `label`.*/
   def ?[A](p: TParser[A], msg0: String): TParser[A] = label(p, msg0)
 
   /**Name the parser in case a failure occurs.*/
-  def label[A](p: TParser[A], msg: String): TParser[A] = {
-    Parser[Text, A]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, A]#PR] {
-      def apply[A] = p.runParser(i0, a0, m0, new Forall[Parser[Text, A]#FA] {
-        def apply[A] = (i, a, m, strs, msg1) => kf.apply(i, a, m, msg #:: strs, msg1)
-      }, ks).apply[A]
-    })
+  def label[A](p: TParser[A], msg: String): TParser[A] = new Parser[Text, A] {
+    def apply[R](st: ParseState[Text], kf: PFailure[Text, R], ks: PSuccess[Text, A, R]) =
+      p(st, (s1, strs, msg1) => kf(s1, msg #:: strs, msg1), ks)
   }
 
   /**Match a specific character.*/
@@ -87,22 +80,21 @@ trait StrictPTextFunctions {
        else fail("satisfyWith")
      })
 
+  import scalaz.Free._
+  import scalaz.std.function._
 
   /**A parser that always runs the failure continuation.*/
-  def fail[A](msg: String): TParser[A] =
-    Parser[Text, A]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, A]#PR] {
-      def apply[A] = kf.apply(i0, a0, m0, Stream(msg), msg)
-    })
+  def fail[A](msg: String): TParser[A] = new Parser[Text, A] {
+    def apply[R](st: ParseState[Text], kf: PFailure[Text, R], ks: PSuccess[Text, A, R]) = kf(st, Stream(msg), msg)
+  }
 
-  def put(s: Text): TParser[Unit] =
-    Parser[Text, Unit]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, Unit]#PR] {
-      def apply[A] = ks.apply(Input(s), a0, m0, ())
-    })
+  def put(s: Text): TParser[Unit] = new Parser[Text, Unit]{
+    def apply[R](st: ParseState[Text], kf: PFailure[Text, R], ks: PSuccess[Text, Unit, R]) = ks(st.copy(input = s), ())
+  }
 
-  def get: TParser[Text] =
-    Parser[Text, Text]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, Text]#PR] {
-      def apply[A] = ks.apply(i0, a0, m0, i0.unI)
-    })
+  def get: TParser[Text] = new Parser[Text, Text] {
+    def apply[R](st: ParseState[Text], kf: PFailure[Text, R], ks: PSuccess[Text, Text, R]) = ks(st, st.input)
+  }
 
   def takeWith(n: Int, p: Text => Boolean): TParser[Text] = {
       ensure(n).flatMap(s => {
@@ -171,29 +163,32 @@ trait StrictPTextFunctions {
 
   def string(s: Text): TParser[Text] = takeWith(s.length, Text.textInstance.equal(s, _))
 
+  import Parser._
   /**If at least n characters are available, return the input, else fail.*/
   def ensure(n: Int): TParser[Text] =
-    Parser[Text, Text]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, Unit]#PR] {
-      def apply[A] = if (i0.unI.length >= n) ks.apply(i0, a0, m0, i0.unI)
-                     else demandInput.flatMap(_ => ensure(n)).runParser(i0, a0, m0, kf, ks).apply[A]
-    })
-
+    new Parser[Text, Text] {
+      def apply[R](st: ParseState[Text], kf: PFailure[Text, R], ks: PSuccess[Text, Text, R]) =
+        if (st.input.length >= n) ks(st, st.input)
+                             else demandInput.flatMap(_ => ensure(n)).apply(st, kf, ks)
+    }
 
   /**Ask for input. If we receive any, pass it to a success continuation, otherwise to a failure continuation.*/
-  def prompt[A](i0: TInput, a0: TAdded, m0: More)(kf: (TInput, TAdded, More) => TResult[A])(ks: (TInput, TAdded, More) => TResult[A]): TResult[A] =
-    Partial[Text, A](s => if (s.isEmpty) kf(i0, a0, Complete)
-                          else ks(Input(i0.unI.append(s)), Added(a0.unA.append(s)), Incomplete))
+  def prompt[A](s0: ParseState[Text])(kf: ParseState[Text] => TResult[A])(ks: ParseState[Text] => TResult[A]): TResult[A] =
+    Partial[Text, A](s => if (s.isEmpty) kf(s0.copy(more = Complete))
+                          else ks(s0.copy(input = s0.input.append(s), added = s0.added.append(s), more = Incomplete)))
 
   /**Demand more input via a `Partial` continuation.*/
   def demandInput: TParser[Unit] =
-    Parser[Text, Unit]((i0, a0, m0, kf, ks) => new Forall[Parser[Text, Unit]#PR] {
-        def apply[A] = m0 match {
-           case Complete => kf.apply(i0, a0, m0, Stream("demandInput"), "not enough input")
-           case Incomplete => {
-              prompt(i0, a0, m0)((i, a, m) => kf.apply[A](i, a, m, Stream("demandInput"), "not enough input"))((i, a, m) => ks.apply(i, a, m, ()))
-           }
-         }
-      })
+    new Parser[Text, Unit] {
+      def apply[R](st: ParseState[Text], kf: PFailure[Text, R], ks: PSuccess[Text, Unit, R]) =
+        st.more match {
+          case Complete => kf(st, Stream("demandInput"), "not enough input")
+          case Incomplete => {
+            prompt(st)(s1 => kf(s1, Stream("demandInput"), "not enough input"))(s2 => ks(s2, ()))
+          }
+        }
+    }
+
 
   /**
    * This parser always succeeds.  It returns 'True' if any input is
@@ -201,32 +196,27 @@ trait StrictPTextFunctions {
    * of all input has been reached.
    */
   def wantInput: TParser[Boolean] =
-    Parser[Text, Boolean]((i0, a0, m0, kf, ks) => new Forall[TParser[Boolean]#PR] {
-        def apply[A] =
-          if (!i0.unI.isEmpty) ks.apply(i0, a0, m0, true)
-          else m0 match {
-           case Complete => ks.apply(i0, a0, m0, false)
-           case Incomplete => {
-              prompt(i0, a0, m0)((i, a, m) => ks.apply[A](i, a, m, false))((i, a, m) => ks.apply(i, a, m, true))
-           }
-         }
-      })
+    new Parser[Text, Boolean] {
+      def apply[R](st: ParseState[Text], kf: PFailure[Text, R], ks: PSuccess[Text, Boolean, R]) =
+          if (!st.input.isEmpty) ks.apply(st, true)
+          else st.more match {
+            case Complete => ks.apply(st, false)
+            case Incomplete => {
+              prompt(st)(s1 => ks(s1, false))(s2 => ks.apply(s2, true))
+            }
+          }
+    }
 
-  def endOfInput: TParser[Unit] = {
-    import Parser.addS
-    Parser[Text, Unit]((i0, a0, m0, kf, ks) => new Forall[TParser[Unit]#PR] {
-      def apply[A] =
-        if (!i0.unI.isEmpty) kf.apply(i0, a0, m0, Stream(), "endOfInput")
-        else m0 match {
-          case Complete => ks.apply(i0, a0, m0, ())
-          case Incomplete => demandInput.runParser(i0, a0, m0,
-            new Forall[TParser[Unit]#FA] {
-              def apply[A] = (i1, a1, m1, str, s) => addS(i0, a0, m0)(i1, a1, m1)((i2, a2, m2) => ks.apply(i2, a2, m2, ()))
-            },
-            new Forall[TParser[Unit]#SA] {
-              def apply[A] = (i1, a1, m1, b) => addS(i0, a0, m0)(i1, a1, m1)((i2, a2, m2) => kf.apply(i2, a2, m2, Stream(), "endOfInput"))
-            }).apply[A]
-        }
-    })
-  }
+
+  def endOfInput: TParser[Unit] =
+     new Parser[Text, Unit] {
+      def apply[R](s0: ParseState[Text], kf: PFailure[Text, R], ks: PSuccess[Text, Unit, R]) =
+        if (!s0.input.isEmpty) kf.apply(s0, Stream(), "endOfInput")
+        else s0.more match {
+          case Complete => ks.apply(s0, ())
+          case Incomplete =>
+            demandInput(s0, (s1, str, s) => addS(s0)(s1)(s2 => ks(s2, ())),
+                            (s1, b) => addS(s0)(s1)(s2 => kf.apply(s2, Stream(), "endOfInput")))
+          }
+     }
 }

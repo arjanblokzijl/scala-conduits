@@ -24,7 +24,7 @@ class CsvSpec extends Specification {
        success
     }
 //    "work on large input" in { //doesn't work, TODO therefore
-//      val str: String = (1 to 10000).map(n => "abc,deffgh,ikj").mkString + "\n"
+//      val str: String = (1 to 1000).map(n => "abc,deffgh,ikj").mkString + "\n"
 //      val text: LText = fromStrict(fromChars(str))
 //      val res = maybeP(csv)(text)
 //      success

@@ -51,8 +51,8 @@ object ParseResult {
   }
 
 
-  type ParseFailure[T, R] = (ParseState[T], Stream[String], String) => ParseResult[T, R]
-  type ParseSuccess[T, B, R] = (ParseState[T], B) => ParseResult[T, R]
+  type PFailure[T, R] = (ParseState[T], Stream[String], String) => ParseResult[T, R]
+  type PSuccess[T, B, R] = (ParseState[T], B) => ParseResult[T, R]
 }
 
 trait ParseResultInstances {
@@ -69,28 +69,38 @@ case object Complete extends More
 case object Incomplete extends More
 
 import Parser._
-trait Parser[T, A] {
-  type FA[R] = ParseFailure[T, R]
-  type SA[R] = ParseSuccess[T, A, R]
+trait Parser[T, A] { p =>
+  type FA[R] = PFailure[T, R]
+  type SA[R] = PSuccess[T, A, R]
   type PR[R] = ParseResult[T, R]
 
-  def runParser(st: ParseState[T], kf: Forall[FA], ks: Forall[SA]): Trampoline[Forall[PR]]
+  def apply[R](st: ParseState[T], kf: PFailure[T, R], ks: PSuccess[T, A, R]): ParseResult[T, R]
 
   //simpler map, but writing it out seems a bit more efficient.
   //def map[B](f: A => B): Parser[T, B] = flatMap(a => Parser.returnP(f(a)))
-  def map[B](f: A => B): Parser[T, B] = parser[T, B]((st, kf0, k) => {
-    runParser(st, kf0, new Forall[SA] {
-      def apply[C] = (s1: ParseState[T], a: A) =>
-        k.apply(s1, f(a))
-     })
-  })
+//  def map[B](f: A => B): Parser[T, B] = new Parser[T, B]((st, kf0, k) => {
+//    apply(st, kf0, new Forall[SA] {
+//      def apply[C] = (s1: ParseState[T], a: A) =>
+//        k.apply(s1, f(a))
+//     })
+//  })
+//
+//  def flatMap[B](f: A => Parser[T, B]): Parser[T, B] = parser[T, B]((s0, kf, ks) =>
+//    apply(s0, kf, new Forall[SA] {
+//      def apply[C] = (s1: ParseState[T], a: A) =>
+//        f(a).apply(s1, kf, ks).run.apply[C]
+//    })
+//  )
 
-  def flatMap[B](f: A => Parser[T, B]): Parser[T, B] = parser[T, B]((s0, kf, ks) =>
-    runParser(s0, kf, new Forall[SA] {
-      def apply[C] = (s1: ParseState[T], a: A) =>
-        f(a).runParser(s1, kf, ks).run.apply[C]
-    })
-  )
+  def map[B](f: A => B): Parser[T, B] = new Parser[T, B] {
+    def apply[R](st: ParseState[T], kf: PFailure[T, R], ks: PSuccess[T, B, R]): ParseResult[T, R] =
+      p(st, kf, (s: ParseState[T], a: A) => ks(s, f(a)))
+  }
+
+  def flatMap[B](f: A => Parser[T, B]): Parser[T, B] = new Parser[T, B] {
+    def apply[R](st: ParseState[T], kf: PFailure[T, R], ks: PSuccess[T, B, R]): ParseResult[T, R] =
+      p(st, kf, (s: ParseState[T], a: A) => f(a)(s, kf, ks))
+  }
 
   /**
    * `plus` combines this parser with the supplied one.
@@ -98,13 +108,9 @@ trait Parser[T, A] {
    * without consuming any input, the second parser is tried.
    * This combinator is defined equal to `plus` of the [[scalaz.MonadPlus]] instance.
    */
-  final def plus(b: Parser[T, A])(implicit M: Monoid[T]): Parser[T, A] = {
-    parser((s0, kf, ks) => {
-      noAdds(s0)(s1 => runParser(s1, new Forall[FA] {
-         def apply[A] = (s1: ParseState[T], str: Stream[String], s: String) =>
-           addS[T, PR[A]](s0)(s1)(s2 => b.runParser(s2, kf, ks).run.apply[A])
-          }, ks))
-    })
+  final def plus(b: Parser[T, A])(implicit M: Monoid[T]): Parser[T, A] = new Parser[T, A] {
+    def apply[R](s0: ParseState[T], kf: PFailure[T, R], ks: PSuccess[T, A, R]) =
+      noAdds(s0)(s1 => p(s1, (s1: ParseState[T], str: Stream[String], s: String) => addS(s0)(s1)(s2 => b(s2, kf, ks)), ks))
   }
 
   final def cons(n: => Parser[T, Stream[A]]): Parser[T, Stream[A]] = flatMap (x => n map (xs => x #:: xs))
@@ -135,12 +141,14 @@ trait Parser[T, A] {
    * a list of the returned values of `p`.
    */
   def many(implicit M: Monoid[T]): Parser[T, Stream[A]] = {
-    def go(p: => Parser[T, A]): Parser[T, Stream[A]] = {
-      lazy val many_p: Parser[T, Stream[A]] = (p cons many_p) <|> returnP[T, Stream[A]](Stream())
-      many_p
+    def go(p: => Parser[T, A], acc: => Parser[T, Stream[A]]): Parser[T, Stream[A]] = {
+      val many_p: Parser[T, Stream[A]] = (p cons acc) <|> returnP[T, Stream[A]](Stream())
+      go(p, many_p)
     }
-    go(this)
+    go(this, returnP[T, Stream[A]](Stream()))
   }
+
+  case class Many(f: Parser[T, A] => Parser[T, Stream[A]])
 
   def sepBy1[S](s: Parser[T, S])(implicit M: Monoid[T]): Parser[T, Stream[A]] = {
     def scan: Parser[T, Stream[A]] =
@@ -219,9 +227,9 @@ object Parser extends ParserFunctions with ParserInstances {
   import scalaz.Free._
   import scalaz.std.function._
   def pm[T](implicit M: Monoid[T]) = parserMonad[T]
-  def apply[T, A](f: (ParseState[T], Forall[Parser[T, A]#FA], Forall[Parser[T, A]#SA]) => Forall[Parser[T, A]#PR]) = new Parser[T, A] {
-    def runParser(st: ParseState[T], kf: Forall[Parser[T, A]#FA], ks: Forall[Parser[T, A]#SA]) = return_(f(st, kf, ks))
-  }
+//  def apply[T, A](f: (ParseState[T], Forall[Parser[T, A]#FA], Forall[Parser[T, A]#SA]) => Forall[Parser[T, A]#PR]) = new Parser[T, A] {
+//    def apply(st: ParseState[T], kf: Forall[Parser[T, A]#FA], ks: Forall[Parser[T, A]#SA]) = return_(f(st, kf, ks))
+//  }
 
   object parserSyntax extends scalaz.syntax.ToMonadPlusV
 }
@@ -252,14 +260,14 @@ case class ParseState[T](input: T, added: T, more: More)
 
 trait ParserFunctions {
 
-  def parser[T, A](f: (ParseState[T], Forall[Parser[T, A]#FA], Forall[Parser[T, A]#SA]) => Trampoline[Forall[Parser[T, A]#PR]]) = new Parser[T, A] {
-    def runParser(st: ParseState[T], kf: Forall[FA], ks: Forall[Parser[T, A]#SA]) = {
-      f(st, kf, ks)
-    }
+//  def parser[T, A](f: (ParseState[T], Forall[Parser[T, A]#FA], Forall[Parser[T, A]#SA]) => Trampoline[Forall[Parser[T, A]#PR]]) = new Parser[T, A] {
+//    def apply[R](st: ParseState[T], kf: Forall[FA], ks: Forall[Parser[T, A]#SA]) = {
+//      f(st, kf, ks)
+//    }
+//  }
+  def returnP[T, A](a: => A): Parser[T, A] = new Parser[T, A] {
+    def apply[R](st: ParseState[T], kf: PFailure[T, R], ks: PSuccess[T, A, R]): ParseResult[T, R] = ks(st, a)
   }
-  def returnP[T, A](a: => A): Parser[T, A] = parser[T, A]((st, _kf, ks) => return_(new Forall[Parser[T, A]#PR] {
-    def apply[A] = ks.apply[A](st, a)
-  }))
 
   def addS[T, A](s0: ParseState[T])(s1: ParseState[T])(f: ParseState[T] => A)(implicit M : Monoid[T]): A = {
     val i = M.append(s0.input, s1.added)
@@ -276,10 +284,9 @@ trait ParserFunctions {
     f(s0.copy(added = M.zero))
 
 
-  def failDesc[T, A](err: String): Parser[T, A] = {
-    parser[T, A]((s0, _kf, ks) => return_(new Forall[Parser[T, A]#PR] {
-      def apply[A] = _kf.apply[A](s0, Stream.empty[String], "Failed reading: " + err)
-    }))
+  def failDesc[T, A](err: String): Parser[T, A] = new Parser[T, A] {
+     def apply[R](st: ParseState[T], kf: PFailure[T, R], ks: PSuccess[T, A, R]) =
+        kf(st, Stream.empty[String], "Failed reading: " + err)
   }
 
   /**

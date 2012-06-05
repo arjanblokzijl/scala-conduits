@@ -131,19 +131,32 @@ trait Parser[T, A] { p =>
   def many(implicit M: Monoid[T]): Parser[T, List[A]] =
     many1 <|> returnP[T, List[A]](List())
 
+  def manyAccum(acc: (A, List[A]) => List[A]): Parser[T, List[A]] = {
+    new Parser[T, List[A]] {
+      def apply[R](st: ParseState[T], kf: PFailure[T, R], ks: PSuccess[T, List[A], R]) = {
+        def walk(xs: => List[A], x: => A, sp: ParseState[T]): ParseResult[T, R] = {
+          val seqxs = xs
+          p(sp, (s0: ParseState[T], stack: Stream[String], msg: String) => ks(s0, acc(x, xs)), (s1: ParseState[T], a: A) => walk(acc(x, seqxs), a, s1))
+        }
+        p(st, (s0: ParseState[T], stack: Stream[String], msg: String) => ks(st, List()), (s1: ParseState[T], a: A) => walk(List(), a, s1))
+      }
+    }
+  }
+
   def sepBy1[S](s: => Parser[T, S])(implicit M: Monoid[T]): Parser[T, List[A]] = {
     lazy val s1 = s
-    def scan: Parser[T, List[A]] = parserMonad[T].map2(this, s1 *> scan <|> returnP(List[A]()))(_ :: _)
+    def scan: Parser[T, List[A]] = parserMonad[T].map2(this, (s1 *> this).many <|> returnP(List[A]()))(_ :: _)
 
     scan
   }
 
   def sepBy[S](s: => Parser[T, S])(implicit M: Monoid[T]): Parser[T, List[A]] = {
     lazy val s1 = s
-    for {
-      a <- this
-      st <- ((s1 *> p.sepBy1(s1)) <|> returnP(List())) <|> returnP(List())
-    } yield a :: st
+    sepBy1(s1) <|> returnP(List())
+//    for {
+//      a <- this
+//      st <- ((s1 *> p.sepBy1(s1)) <|> returnP(List())) <|> returnP(List())
+//    } yield a :: st
   }
 
   def endBy[S](s: => Parser[T, S])(implicit M: Monoid[T]): Parser[T, List[A]] = {

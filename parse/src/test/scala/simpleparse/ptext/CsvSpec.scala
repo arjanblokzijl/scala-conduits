@@ -19,14 +19,14 @@ class CsvSpec extends Specification {
 
   "csv parsing" should {
     "work" in {
-       val res = maybeP(cell)(fromStrict(fromChars("ab,bc,de,ef\n,gh,hi,jk,lm\nop,qr,st,uv\n")))
-       println("result is " + res)
-       success
+       val res = maybeP(csv)(fromStrict(fromChars("ab,bc,de,ef\ngh,hi,jk,lm\nop,qr,st,uv\n")))
+       res must be_==(Some(List(List("ab", "bc", "de", "ef"), List("gh", "hi", "jk", "lm"), List("op", "qr", "st", "uv"))))
     }
-//    "work on large input" in { //doesn't work, TODO therefore
+//    "work on large input" in { //gives SOE, TODO therefore
 //      val str: String = (1 to 1000).map(n => "abc,deffgh,ikj").mkString + "\n"
 //      val text: LText = fromStrict(fromChars(str))
-//      val res = maybeP(csv)(text)
+//      val res = maybeP(line)(text)
+//      println("result is " + res)
 //      success
 //    }
   }

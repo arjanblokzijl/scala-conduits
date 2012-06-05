@@ -6,7 +6,9 @@ import text.Text
 import simpleparse.{ParseResult => PR}
 import simpleparse.{Parser => P}
 import simpleparse.ParseResult.Partial
-import scalaz.{DList, Forall}
+import scalaz._
+import Free._
+import std.function._
 import Parser._
 import ParseResult._
 
@@ -169,11 +171,11 @@ trait StrictPTextFunctions {
     new Parser[Text, Text] {
       def apply[R](st: ParseState[Text], kf: PFailure[Text, R], ks: PSuccess[Text, Text, R]) =
         if (st.input.length >= n) ks(st, st.input)
-                             else demandInput.flatMap(_ => ensure(n)).apply(st, kf, ks)
+        else demandInput.flatMap(_ => ensure(n))(st, kf, ks)
     }
 
   /**Ask for input. If we receive any, pass it to a success continuation, otherwise to a failure continuation.*/
-  def prompt[A](s0: ParseState[Text])(kf: ParseState[Text] => TResult[A])(ks: ParseState[Text] => TResult[A]): TResult[A] =
+  def prompt[A](s0: ParseState[Text])(kf: ParseState[Text] => ParseResult[Text, A])(ks: ParseState[Text] => ParseResult[Text, A]): ParseResult[Text, A] =
     Partial[Text, A](s => if (s.isEmpty) kf(s0.copy(more = Complete))
                           else ks(s0.copy(input = s0.input.append(s), added = s0.added.append(s), more = Incomplete)))
 

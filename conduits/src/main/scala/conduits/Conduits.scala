@@ -30,6 +30,9 @@ object Conduits {
     /*Alias for `%%==`*/
     def &=[B](sink: Sink[A, F, B])(implicit M: Monad[F]): F[B] = %%==(sink)
 
+    /*Alias for `%%==`*/
+    def connectTo[B](sink: Sink[A, F, B])(implicit M: Monad[F]): F[B] = %%==(sink)
+
     /**
      * The connect and resume operator. This does not close the source, but instead
      * returns it so that it can be used again.

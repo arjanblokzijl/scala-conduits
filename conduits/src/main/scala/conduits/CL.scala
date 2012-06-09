@@ -55,12 +55,12 @@ object CL {
   def sum[F[_]](implicit M: Monad[F]): Sink[Int, F, Int] = foldLeft((0: Int))(_ + _)
 
   /**Take a single value from the stream, if available.*/
-  def head[F[_], A](implicit M: Monad[F]): Sink[A, F, Option[A]] =
-    NeedInput(a =>  Done(None, Some(a)), pipeMonad[A, Void, F].point[Option[A]](None))
+  def head[F[_], A](implicit M: Monad[F]): Pipe[A, Void, F, Option[A]] = await
 
   /**Look at the next value of the stream, if available. This does not alter the content of the stream*/
-  def peek[F[_], A](implicit M: Monad[F]): Sink[A, F, Option[A]] =
-    NeedInput(a => Done(Some(a), Some(a)), pipeMonad[A, Void, F].point[Option[A]](None))
+  def peek[F[_], A](implicit M: Monad[F]): Pipe[A, Void, F, Option[A]] =
+    await[F, A, Void].flatMap(_.map(x => leftover[F, A, Void](x).flatMap(_ => Done[A, Void, F, Option[A]](Some(x)))).getOrElse(Done[A, Void, F, Option[A]](None)))
+
 
   /**
    * takes the given number of elements of the Stream, and returns the elements in the given [[scalaz.Monoid]].
@@ -68,10 +68,10 @@ object CL {
   def takeM[F[_], M[_], A](n: Int)(implicit M: Monad[F], P: Pointed[M], MO: Monoid[M[A]]): Sink[A, F, M[A]] = {
     def go(count: Int, acc: M[A]) = NeedInput(push(count, acc), pipeMonad[A, Void, F].point(acc))
     def push(count: Int, acc: M[A])(x: A): Sink[A, F, M[A]] = {
-       if (count <= 0) Done(Some(x), acc)
+       if (count <= 0) Done(acc)
        else {
          val count1 = count - 1
-         if (count1 <= 0) Done(None, MO.append(acc, P.point(x)))
+         if (count1 <= 0) Done(MO.append(acc, P.point(x)))
          else NeedInput(push(count1, MO.append(acc, P.point(x))),  pipeMonad[A, Void, F].point(MO.append(acc, P.point(x))))
        }
     }
@@ -95,10 +95,10 @@ object CL {
   def takeDList[F[_], A](n: Int)(implicit M: Monad[F]): Sink[A, F, DList[A]] = {
     def go(count: Int, acc: => DList[A]) = NeedInput(push(count, acc), pipeMonad[A, Void, F].point(acc))
     def push(count: Int, acc: => DList[A])(x: A): Sink[A, F, DList[A]] =
-      if (count <= 0) Done(Some(x), acc)
+      if (count <= 0) Done(acc)
       else {
         val count1 = count - 1
-        if (count1 <= 0) Done(None, acc :+ x)
+        if (count1 <= 0) Done(acc :+ x)
         else NeedInput(push(count1, acc :+ x), pipeMonad[A, Void, F].point(acc))
       }
 
@@ -110,10 +110,10 @@ object CL {
   private[conduits] def takeBuffer[F[_], A](n: Int)(implicit M: Monad[F]): Sink[A, F, Seq[A]] = {
     def go(count: Int, acc: collection.mutable.ListBuffer[A]): Sink[A, F, Seq[A]] = NeedInput(push(count, acc), pipeMonad[A, Void, F].point(acc))
     def push(count: Int, acc: collection.mutable.ListBuffer[A])(x: A): Sink[A, F, Seq[A]] = {
-       if (count <= 0) Done(Some(x), acc)
+       if (count <= 0) Done(acc)
        else {
          val count1 = count - 1
-         if (count1 <= 0) Done(None, (acc += x))
+         if (count1 <= 0) Done(acc += x)
          else NeedInput(push(count1, acc += x), pipeMonad[A, Void, F].point(acc += x))
        }
     }
@@ -122,12 +122,12 @@ object CL {
 
   def drop[F[_], A](count: Int)(implicit M: Monad[F]): Sink[A, F, Unit] = {
     def push(i: A): Sink[A, F, Unit] = (count - 1) match {
-      case 0 => Done(None, ())
+      case 0 => Done(())
       case n => drop(n)
     }
     count match {
-      case n if (n <= 0) => NeedInput(i => Done(Some(i), ()), pipeMonad[A, Void, F].point(()))
-      case c => NeedInput(push, NeedInput(push, pipeMonad[A, Void, F].point(())))
+      case n if (n <= 0) => NeedInput(i => leftover(i), Done(()))
+      case c => NeedInput(push, NeedInput(push, Done(())))
     }
   }
 
@@ -137,10 +137,13 @@ object CL {
     go(DList())
   }
 
-  def consume[F[_], A](implicit M: Monad[F]): Sink[A, F, Stream[A]] = {
+  def consume[F[_], A](implicit M: Monad[F]): Pipe[A, Void, F, Stream[A]] = {
     def go(acc: Stream[A]): Sink[A, F, Stream[A]] = NeedInput(push(acc), pipeMonad[A, Void, F].point(acc))
     def push(acc: Stream[A])(x: A): Sink[A, F, Stream[A]] = go(streamInstance.plus(acc, Stream(x)))
-    go(Stream.empty[A])
+    def loop(acc: Stream[A]): Pipe[A, Void, F, Stream[A]] = {
+      await[F, A, Void].flatMap(i => i.map(x => loop(streamInstance.plus(acc, Stream(x)))).getOrElse(Done(acc)))
+    }
+    loop(Stream.empty[A])
   }
 
   def filter[F[_], A](f: A => Boolean)(implicit M: Monad[F]): Conduit[A, F, A] = {
@@ -220,11 +223,11 @@ object CL {
   }
 
   def zip[F[_], A, B](f1: Source[F, A], f2: Source[F, B])(implicit M: Monad[F]): Source[F, (A, B)] = (f1, f2) match {
-    case (Done(_, ()), Done(_, ())) => Done(None, ())
-    case (Done(_, ()), HaveOutput(_, close, _)) => PipeM(M.bind(runFinalize(close))(_ => M.point(Done(None, ()))), close)
-    case (HaveOutput(_, close, _), Done(_, ())) => PipeM(M.bind(runFinalize(close))(_ => M.point(Done(None, ()))), close)
-    case (Done(_, ()), PipeM(_, close)) => PipeM(M.bind(runFinalize(close))(_ => M.point(Done(None, ()))), close)
-    case (PipeM(_, close), Done(_, ())) => PipeM(M.bind(runFinalize(close))(_ => M.point(Done(None, ()))), close)
+    case (Done(()), Done(())) => Done(())
+    case (Done(()), HaveOutput(_, close, _)) => PipeM(M.bind(runFinalize(close))(_ => M.point(Done(()))), close)
+    case (HaveOutput(_, close, _), Done(())) => PipeM(M.bind(runFinalize(close))(_ => M.point(Done(()))), close)
+    case (Done(()), PipeM(_, close)) => PipeM(M.bind(runFinalize(close))(_ => M.point(Done(()))), close)
+    case (PipeM(_, close), Done(())) => PipeM(M.bind(runFinalize(close))(_ => M.point(Done(()))), close)
     case (PipeM(mx, closex), PipeM(my, closey)) => PipeM(M.map2(mx, my)((a, b) => zip(a, b)), closex.flatMap(_ => closey))
     case (PipeM(mx, closex), y@HaveOutput(_, closey, _)) => PipeM(M.map(mx)(x => zip(x, y)), closex.flatMap(_ => closey))
     case (x@HaveOutput(_, closex, _), PipeM(my, closey)) => PipeM(M.map(my)(y => zip(x, y)), closex.flatMap(_ => closey))
@@ -262,11 +265,7 @@ object CL {
   private def zipSinks1[F[_], A, B, C](by: scalaz.Ordering)(f1: Sink[A, F, B], f2: Sink[A, F, C])(implicit M: Monad[F]): Sink[A, F, (B, C)] = (f1, f2) match {
     case (PipeM(mpx, mx), py) => PipeM(M.map(mpx)(x => zipSinks1(by)(x, py)), finalizeMonad[F].map2(mx, py.pipeClose)((x, y) => (x, y)))
     case (px, PipeM(mpy, my)) => PipeM(M.map(mpy)(y => zipSinks1(by)(px, y)), finalizeMonad[F].map2(px.pipeClose, my)((x, y) => (x, y)))
-    case (Done(ix, x), Done(iy, y)) => by match {
-      case scalaz.Ordering.EQ => Done(iy.flatMap(_ => iy), (x, y))
-      case scalaz.Ordering.GT => Done(ix, (x, y))
-      case scalaz.Ordering.LT => Done(iy, (x, y))
-    }
+    case (Done(x), Done(y)) => Done((x, y))
     case (NeedInput(fpx, px), NeedInput(fpy, py)) => NeedInput(i => zipSinks1(scalaz.Ordering.EQ)(fpx(i), fpy(i)), zipSinks1(scalaz.Ordering.EQ)(px, py))
     case (NeedInput(fpx, px), py) => NeedInput(i => zipSinks1(scalaz.Ordering.GT)(fpx(i), py), zipSinks1(scalaz.Ordering.EQ)(px, py))
     case (px, NeedInput(fpy, py)) => NeedInput(i => zipSinks1(scalaz.Ordering.LT)(px, fpy(i)), zipSinks1(scalaz.Ordering.EQ)(px, py))

@@ -66,7 +66,7 @@ object SinkFunctions {
   def sinkState[S, I, F[_], A](state: => S, push: S => (=> I) => F[SinkStateResult[S, I, A]], close: S => F[A])(implicit M: Monad[F]): Sink[I, F, A] = {
     def push1(state1: S)(input: I): Sink[I, F, A] = PipeM(
       M.bind(push(state1)(input))((res: SinkStateResult[S, I, A]) =>
-         res.fold(done = (i, a) => M.point(Done(i, a)),
+         res.fold(done = (a, b) => M.point(Leftover(Done(b), a.getOrElse(input))),
          processing = s => M.point(NeedInput[I, Void, F, A](push1(s), close1(s)))))
       , FinalizeM(close(state))
       )
@@ -80,7 +80,7 @@ object SinkFunctions {
 
     def push1(key: => ReleaseKey)(state: => S)(input: => A): F[Sink[A, F, B]] = {
       M.bind(push(state)(input))(res => res.fold(
-        done = (a, b) => M.bind(M0.release(key))(_ => M.point(Done(a, b))),
+        done = (a, b) => M.bind(M0.release(key))(_ => M.point(Leftover(Done(b), a.getOrElse(input)))),
         processing = M.point(NeedInput(i => {
           val mpipe = push1(key)(state)(i)
           PipeM(mpipe, finalizeMonadTrans.liftM(mpipe).flatMap(p => p.pipeClose))},

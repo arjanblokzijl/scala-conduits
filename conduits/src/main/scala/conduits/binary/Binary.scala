@@ -79,7 +79,7 @@ object Binary {
   def head[F[_]](implicit M: Monad[F]): Sink[ByteString, F, Option[Byte]] = {
     def push(bs: ByteString): Sink[ByteString, F, Option[Byte]] = bs.uncons match {
       case None => NeedInput(push, close)
-      case Some((b, bs1)) => Done(if (bs1.isEmpty) None else Some(bs1), Some(b))
+      case Some((b, bs1)) => Done(Some(b))
     }
     def close: Sink[ByteString, F, Option[Byte]] = pipeMonad[ByteString, Void, F].point(None)
     NeedInput(push, close)
@@ -113,7 +113,7 @@ object Binary {
         else HaveOutput(r, FinalizePure(()), x)
       }
       else {
-        val f = Done[ByteString, ByteString, F, Unit](Some(y), ())
+        val f = leftover[F, ByteString, ByteString](y)
         if (x.isEmpty) f
         else HaveOutput(f, FinalizePure(()), x)
       }
@@ -123,11 +123,11 @@ object Binary {
 
   /**Drop all bytes while the given predicate is true.*/
   def dropWhile[F[_]](p: Byte => Boolean)(implicit M: Monad[F]): Sink[ByteString, F, Unit] = {
-    def close: Sink[ByteString, F, Unit] = pipes.pipeMonoid[ByteString, Void, F].zero
+    def close: Sink[ByteString, F, Unit] = Done(())
     def push(bs: ByteString): Sink[ByteString, F, Unit] = {
       val bs1 = bs.dropWhile(p)
       if (bs1.isEmpty) NeedInput(push, close)
-      else Done(Some(bs1), ())
+      else leftover(bs1)
     }
     NeedInput(push, close)
   }

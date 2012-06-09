@@ -19,6 +19,6 @@ object Void {
   def vacuous[F[_], A](fa: F[Void], z: Void)(implicit F: Functor[F]): F[A] = F.map(fa)(absurd(z))
 
   implicit def voidSemiGroup: Semigroup[Void] = new Semigroup[Void] {
-    def append(f1: Void, f2: => Void) = f1 //left biased
+    def append(f1: Void, f2: => Void) = f2 //right biased
   }
 }

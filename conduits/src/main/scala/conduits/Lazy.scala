@@ -14,9 +14,9 @@ object Lazy {
    * It relies on MonadActive to determine if the underlying
    * Monadic state has been closed.
    */
-  def lazyConsume[F[_], A](s: Source[F, A])(implicit M: MonadControlIO[F], MA: MonadActive[F]): F[Stream[A]] = {
+  def lazyConsume[F[_], A](s: Source[F, A])(implicit M: MonadControlIO[F], MA: MonadActive[F]): F[Stream[A]] =
     s match {
-      case Done(_, ()) => M.point(Stream.Empty)
+      case Done(()) => M.point(Stream.Empty)
       case HaveOutput(src, _, x) => M.map(lazyConsume(src))(xs => x #:: xs)
       case PipeM(msrc, _) =>
         controlIO((runInIO: RunInBase[F, IO]) => {
@@ -30,5 +30,5 @@ object Lazy {
         })
       case NeedInput(_, c) => lazyConsume(c)
     }
-  }
+
 }

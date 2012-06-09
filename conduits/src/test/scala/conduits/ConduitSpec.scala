@@ -15,6 +15,7 @@ import CL._
 import org.specs2.ScalaCheck
 import Conduits._
 import collection.immutable.Stream
+import conduits.Pipe.Done
 
 /**
  * User: arjan
@@ -138,9 +139,9 @@ class ConduitSpec extends Specification with ScalaCheck {
       import pipes._
       import ConduitFunctions._
       val s = Stream.from(1).take(11)
-      val sumSink: Sink[Int, Id, Int] = head[Id, Int] flatMap(ma => ma match {
+      val sumSink = head[Id, Int].flatMap(ma => ma match {
         case Some(i) => head[Id, Int].map(mi => i + mi.getOrElse(0))
-        case None => pipeMonad[Int, Void, Id].point(0)
+        case None => Done(0)
       })
 
       val res = (sourceList[Id, Int](s) %= sequence(sumSink) %%== consume)
@@ -151,9 +152,9 @@ class ConduitSpec extends Specification with ScalaCheck {
       import pipes._
       import ConduitFunctions._
       val s = Stream.from(1).take(11)
-      val sumSink: Sink[Int, Id, Int] = head[Id, Int] flatMap(ma => ma match {
+      val sumSink = head[Id, Int].flatMap(ma => ma match {
         case Some(i) => peek[Id, Int].map(mi => i + mi.getOrElse(0))
-        case None => pipeMonad[Int, Void, Id].point(0)
+        case None => Done(0)
       })
 
       val res = (sourceList[Id, Int](s) %= sequence(sumSink) %%== consume)

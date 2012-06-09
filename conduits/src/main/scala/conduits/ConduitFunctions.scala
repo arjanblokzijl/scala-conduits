@@ -125,7 +125,7 @@ object ConduitFunctions {
   }
 
   def fromList[A, F[_], B](bs: Stream[B])(implicit M: Monad[F]): Pipe[A, B, F, Unit] = bs match {
-    case Stream.Empty => Done(None, ())
+    case Stream.Empty => Done(())
     case x #:: xs => HaveOutput[A, B, F, Unit](fromList(xs), FinalizePure(()), x)
   }
 
@@ -142,13 +142,18 @@ object ConduitFunctions {
    */
   def sequenceSink[S, A, F[_], B](state: => S, fsink: SequencedSink[S, A, F, B])(implicit M: Monad[F]): Conduit[A, F, B] = {
     hasInput[A, B, F] flatMap(x =>
-      if (x)
+      if (x) {
+//        println("x is true, state is " + state)
         sinkToPipe(fsink(state)) flatMap(res => res match {
-          case Emit(s1, os) => fromList[A, F, B](os).flatMap(_ => sequenceSink(s1, fsink))
-          case Stop() => pipeMonad[A, B, F].point(())
+          case Emit(s1, os) => {
+//            println("Emit: s1 is %s, os is %s" format(s1, os.force))
+            fromList[A, F, B](os).flatMap(_ => sequenceSink(s1, fsink))
+          }
+          case Stop() => Done(())
           case StartConduit(c) => c
         })
-      else pipeMonad[A, B, F].point(())
+      }
+      else Done(())
     )
   }
 

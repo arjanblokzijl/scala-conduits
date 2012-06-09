@@ -98,8 +98,11 @@ trait Parser[T, A] { p =>
   }
 
   final def cons(n: => Parser[T, List[A]]): Parser[T, List[A]] = {
-    lazy val p = n
-    flatMap (x => p map (xs => x :: xs))
+    lazy val n0 = n
+    for {
+      x <- this
+      xs <- n0
+    } yield x :: xs
   }
 
 
@@ -128,8 +131,10 @@ trait Parser[T, A] { p =>
    * `many` applies the action `p` zero or more times. Returns
    * a list of the returned values of `p` (and returns a SO when run on large input).
    */
-  def many(implicit M: Monoid[T]): Parser[T, List[A]] =
-    many1 <|> returnP[T, List[A]](List())
+  def many(implicit M: Monoid[T]): Parser[T, List[A]] = {
+    lazy val many_p : Parser[T, List[A]] = (p cons many_p) <|> returnP(Nil)
+    many_p
+  }
 
   def manyAccum(acc: (A, List[A]) => List[A]): Parser[T, List[A]] = {
     new Parser[T, List[A]] {
@@ -153,10 +158,6 @@ trait Parser[T, A] { p =>
   def sepBy[S](s: => Parser[T, S])(implicit M: Monoid[T]): Parser[T, List[A]] = {
     lazy val s1 = s
     sepBy1(s1) <|> returnP(List())
-//    for {
-//      a <- this
-//      st <- ((s1 *> p.sepBy1(s1)) <|> returnP(List())) <|> returnP(List())
-//    } yield a :: st
   }
 
   def endBy[S](s: => Parser[T, S])(implicit M: Monoid[T]): Parser[T, List[A]] = {

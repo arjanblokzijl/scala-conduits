@@ -34,7 +34,7 @@ object RunConduits extends App {
   val takeDList = CL.takeDList[Id, Int](10000)
 
   println("result sum  " + (sourceLargeId %%== CL.sum))
-  println("result consume " + (sourceStream %%== sinkConsume).flatten.take(15).force)
+//  println("result consume " + (sourceStream %%== sinkConsume).flatten.take(15).force)
   println("result large map io " + (mapSourceLarge %%== sinkTake).unsafePerformIO.take(15).force)
   println("result large map id " + (mapSourceLargeId %%== sinkTakeId).take(15).force)
   println("result resourceT " + runResourceT(sourceT %%== sinkT).unsafePerformIO)

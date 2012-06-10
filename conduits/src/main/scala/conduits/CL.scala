@@ -7,6 +7,7 @@ import scalaz._
 import collection.immutable.Stream
 import conduits.pipes._
 import Finalize._
+import collection.mutable.ListBuffer
 
 /**
 * List like operations for conduits.
@@ -138,12 +139,10 @@ object CL {
   }
 
   def consume[F[_], A](implicit M: Monad[F]): Pipe[A, Void, F, Stream[A]] = {
-    def go(acc: Stream[A]): Sink[A, F, Stream[A]] = NeedInput(push(acc), pipeMonad[A, Void, F].point(acc))
-    def push(acc: Stream[A])(x: A): Sink[A, F, Stream[A]] = go(streamInstance.plus(acc, Stream(x)))
-    def loop(acc: Stream[A]): Pipe[A, Void, F, Stream[A]] = {
-      await[F, A, Void].flatMap(i => i.map(x => loop(streamInstance.plus(acc, Stream(x)))).getOrElse(Done(acc)))
+    def go(acc: Stream[A]): Pipe[A, Void, F, Stream[A]] = {
+      await[F, A, Void].flatMap(i => i.map(x => go(streamInstance.plus(acc, Stream(x)))).getOrElse(Done(acc)))
     }
-    loop(Stream.empty[A])
+    go(Stream.empty[A])
   }
 
   def filter[F[_], A](f: A => Boolean)(implicit M: Monad[F]): Conduit[A, F, A] = {

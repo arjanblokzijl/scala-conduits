@@ -8,7 +8,7 @@ import scalaz.std.function._
 import scalaz.Free.{Trampoline, return_, suspend}
 import scalaz.effect._
 import javax.print.attribute.standard.Finishings
-import resourcet.MonadThrow
+import resourcet.{ReleaseKey, MonadResource, MonadThrow}
 
 /**
  * The underlying datatype for all the types in this package.  In has four
@@ -61,6 +61,11 @@ sealed trait Pipe[A, B, F[_], R] {
     , leftover = (p, i) => Leftover(p, i)
     , pipeM = (mp, c) => PipeM(F.map(mp)(p => p.pipePush(i)), c)
   )
+
+  def pipePushStrip(i: => A)(implicit F: Monad[F]): Pipe[A, B, F, R] = pipePush(i) match {
+    case Leftover(p1, _) => p1
+    case p1 => p1
+  }
 
   def map[S](f: (R) => S)(implicit F: Monad[F]): Pipe[A, B, F, S] = flatMap(a => Done(f(a)))
 
@@ -298,12 +303,6 @@ trait FinalizeFunctions {
     case (FinalizeM(x), FinalizeM(y)) => FinalizeM(F.bind(x)(_ => y))
     case (FinalizeM(x), FinalizePure(y)) => FinalizeM(F.bind(x)(_ => F.point(y)))
   }
-
-//  -- Since 0.4.1
-//  combineFinalize :: Monad m => Finalize m () -> Finalize m r -> Finalize m r
-//  combineFinalize (FinalizePure ()) f = f
-//  combineFinalize (FinalizeM x) (FinalizeM y) = FinalizeM $ x >> y
-//  combineFinalize (FinalizeM x) (FinalizePure y) = FinalizeM $ x >> return y
 }
 
 trait PipeFunctions {
@@ -421,6 +420,14 @@ trait PipeFunctions {
     , leftover = (p, i) => Leftover(sinkToPipe(p), i)
     , pipeM = (mp, c) => PipeM(F.map(mp)(p => sinkToPipe(p)), c)
   )
+
+  def bracketP[F[_], A, B](alloc: IO[A], free: A => IO[Unit], inside: A => TPipe[A, B, F, Unit])(implicit MR: MonadResource[F]): Pipe[A, B, F, Unit] = {
+    implicit val M = MR.MO
+    def start: F[Pipe[A, B, F, Unit]] = {
+      M.map(MR.allocate(alloc, free)){case (key, seed) => TPipe.toPipeFinalize[F, A, B, Unit](FinalizeM(MR.release(key)), inside(seed))}
+    }
+    PipeM(start, FinalizePure(()))
+  }
 }
 
 object pipes extends PipeInstances with PipeFunctions {

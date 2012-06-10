@@ -29,6 +29,7 @@ object Lazy {
           } yield r2
         })
       case NeedInput(_, c) => lazyConsume(c)
+      case Leftover(p, i) => lazyConsume(p.pipePushStrip(i))
     }
 
 }

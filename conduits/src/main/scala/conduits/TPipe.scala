@@ -5,6 +5,8 @@ import scala.Some
 import scalaz.{Monoid, MonadTrans, Monad}
 import conduits.Pipe.HaveOutput
 import conduits.Finalize.{FinalizePure, FinalizeM}
+import scalaz.effect.IO
+import resourcet.MonadResource
 
 /**
  * User: arjan
@@ -165,4 +167,13 @@ trait TPipeFunctions {
     }
     go(tpipe)
   }
+
+  def bracketTP[F[_], A, B](alloc: IO[A], free: A => IO[Unit], inside: A => TPipe[A, B, F, Unit])(implicit MR: MonadResource[F]): Pipe[A, B, F, Unit] = {
+    implicit val M = MR.MO
+    def start: F[Pipe[A, B, F, Unit]] = {
+      M.map(MR.allocate(alloc, free)){case (key, seed) => TPipe.toPipeFinalize[F, A, B, Unit](FinalizeM(MR.release(key)), inside(seed))}
+    }
+    PipeM(start, FinalizePure(()))
+  }
+
 }

@@ -421,10 +421,10 @@ trait PipeFunctions {
     , pipeM = (mp, c) => PipeM(F.map(mp)(p => sinkToPipe(p)), c)
   )
 
-  def bracketP[F[_], A, B](alloc: IO[A], free: A => IO[Unit], inside: A => TPipe[A, B, F, Unit])(implicit MR: MonadResource[F]): Pipe[A, B, F, Unit] = {
+  def bracketP[F[_], A, B](alloc: IO[A], free: A => IO[Unit], inside: A => Pipe[A, B, F, Unit])(implicit MR: MonadResource[F]): Pipe[A, B, F, Unit] = {
     implicit val M = MR.MO
     def start: F[Pipe[A, B, F, Unit]] = {
-      M.map(MR.allocate(alloc, free)){case (key, seed) => TPipe.toPipeFinalize[F, A, B, Unit](FinalizeM(MR.release(key)), inside(seed))}
+      M.map(MR.allocate(alloc, free)){case (key, seed) => inside(seed).addCleanup((_: Boolean) => MR.release(key))}
     }
     PipeM(start, FinalizePure(()))
   }

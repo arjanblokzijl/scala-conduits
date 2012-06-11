@@ -32,7 +32,7 @@ class CLBenchmark extends CBenchmark with BenchmarkData {
 
    def takeDListMonoid(data:Stream[Int]): List[Int] = {
      var total = List[Int]()
-     total = (CL.sourceList[Id, Int](data) %%== CL.take[DList, Int](100000)).toList
+     total = (CL.sourceList[Id, Int](data) %%== CL.takeId[DList, Int](100000)).toList
      total
    }
 

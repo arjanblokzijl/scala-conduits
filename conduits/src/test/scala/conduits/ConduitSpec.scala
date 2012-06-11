@@ -24,7 +24,12 @@ class ConduitSpec extends Specification with ScalaCheck {
 
   "takes the given number of elements" ! check {
     (stream: Stream[Int], n: Int) =>
-      (sourceList[Id, Int](stream) %%== take[Stream, Int](n))  must be_===(stream.take(n))
+      (sourceList[Id, Int](stream) %%== takeId[Stream, Int](n))  must be_===(stream.take(n))
+  }
+
+  "takes the given number of elements" ! check {
+    (stream: Stream[Int], n: Int) =>
+      (sourceList[Id, Int](stream) %%== take[Id, Int](n)) must be_===(stream.take(n))
   }
 
   "drops the given number of elements" ! check {
@@ -116,7 +121,7 @@ class ConduitSpec extends Specification with ScalaCheck {
     }
     "take entire stream" in {
       val s = Stream.from(0).take(1)
-      val res = (sourceList[Id, Int](s) %%== CL.take[Stream, Int](4))
+      val res = (sourceList[Id, Int](s) %%== CL.takeId[Stream, Int](4))
       res must be_==(s.take(4))
     }
   }
@@ -198,12 +203,12 @@ class ConduitSpec extends Specification with ScalaCheck {
   "zipping sinks" should {
     "take fewer on left" in {
       val s = Stream.from(0).take(10)
-      val res = (sourceList[Id, Int](s) %%== zipSinks(take[Stream, Int](4), consume[Id, Int]))
+      val res = (sourceList[Id, Int](s) %%== zipSinks(takeId[Stream, Int](4), consume[Id, Int]))
       res must be_==(s.take(4), s)
     }
     "take fewer on right" in {
       val s = Stream.from(0).take(10)
-      val res = (sourceList[Id, Int](s) %%== zipSinks(consume[Id, Int], take[Stream, Int](4)))
+      val res = (sourceList[Id, Int](s) %%== zipSinks(consume[Id, Int], takeId[Stream, Int](4)))
       res must be_==(s, s.take(4))
     }
   }

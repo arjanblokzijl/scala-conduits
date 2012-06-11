@@ -17,7 +17,7 @@ object RunConduits extends App {
   val sinkSum = CL.sum[IO]
   val sinkTake = CL.takeM[IO, Stream, Int](10)
   val sinkConsume = CL.consume[Stream, Int]
-  val sinkTakeId = CL.take[Stream, Int](10)
+  val sinkTakeId = CL.takeId[Stream, Int](10)
   val sinkT = CL.sum[RTIO]
   val sourceStream = CL.sourceList[Stream, Int]((1 to 15).toStream)
   val sourceId = CL.sourceList[Id, Int]((1 to 15).toStream)

@@ -83,9 +83,18 @@ object CL {
   /**
    * Calls `takeM` using the Identity Monad.
    */
-  def take[M[_], A](n: Int)(implicit P: Pointed[M], MO: Monoid[M[A]]): Sink[A, Id, M[A]] = {
+  def takeId[M[_], A](n: Int)(implicit P: Pointed[M], MO: Monoid[M[A]]): Sink[A, Id, M[A]] = {
     implicit val idM = Id.id
     takeM(n)
+  }
+
+  /**Takes the given number of elements from the input stream.*/
+  def take[F[_], A](n: Int)(implicit M: Monad[F]): Sink[A, F, Stream[A]] = {
+     def loop(front: Stream[A] => Stream[A], count: Int): Sink[A, F, Stream[A]] =
+       if (count <= 0) Done(front(Stream()))
+       else await[F, A, Void].flatMap[Stream[A]]((i: Option[A]) => i.map(x => loop(xs => front(x #:: xs), count - 1)).getOrElse(Done(front(Stream()))))
+
+    loop(identity, n)
   }
 
   /**

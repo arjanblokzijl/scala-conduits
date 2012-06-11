@@ -14,7 +14,7 @@ import scalaz.Monad
 import bs._
 import empty.Void
 import Finalize._
-
+import TPipe._
 /**
  * User: arjan
  */
@@ -90,16 +90,19 @@ object Binary {
    * This does not ensure that all of those bytes are actually consumed.
    */
   def isolate[F[_]](count: Int)(implicit M: Monad[F]): Conduit[ByteString, F, ByteString] = {
-    def close(s: => Int): F[Stream[ByteString]] = M.point(Stream.Empty)
-    def push(c: => Int, bs: => ByteString): F[ConduitStateResult[Int, ByteString, ByteString]] =
-      if (c <= 0) M.point(StateFinished(Some(bs), Stream.Empty))
-      else {
-        val (a, b) = bs.splitAt(c)
-        val c1 = c - a.length
-        M.point(if (c1 <= 0) StateFinished(if (b.isEmpty) None else Some(b), if (a.isEmpty) Stream.Empty else Stream(a))
-        else StateProducing(c1, Stream(a)))
-      }
-    conduitState(count, push, close)
+    def loop(i: Int): TPipe[ByteString, ByteString, F, Unit] =
+      if (i <= 0) TDone(())
+      else
+        tawait[F, ByteString, ByteString].flatMap(bs => {
+          val (a, b) = bs.splitAt(i)
+          val i1 = i - a.length
+          if (i1 <= 0)
+            if (b.isEmpty) tyield(a)
+            else tleftover(b).flatMap(_ => tyield(a))
+          else tyield(a).flatMap(_ => loop(i1))
+        })
+
+    toPipe(loop(count))
   }
 
   /**Return all bytes while the given predicate is true.*/

@@ -77,6 +77,7 @@ object ConduitFunctions {
     def unapply[A, B](r: ConduitIOResult[A, B]): Option[(Stream[B])] = r.fold(ToNone2, Some(_))
   }
 
+//  case class ConduitSt[S, A](state: S, input: A, push: )
   /**
    * Construct a 'Conduit' with some stateful functions. This function addresses
    * threading the state value for you.

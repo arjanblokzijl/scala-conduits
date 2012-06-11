@@ -8,6 +8,7 @@ import collection.immutable.Stream
 import conduits.pipes._
 import Finalize._
 import collection.mutable.ListBuffer
+import conduits.TPipe._
 
 /**
 * List like operations for conduits.
@@ -122,14 +123,10 @@ object CL {
   }
 
   def drop[F[_], A](count: Int)(implicit M: Monad[F]): Sink[A, F, Unit] = {
-    def push(i: A): Sink[A, F, Unit] = (count - 1) match {
-      case 0 => Done(())
-      case n => drop(n)
-    }
-    count match {
-      case n if (n <= 0) => NeedInput(i => leftover(i), Done(()))
-      case c => NeedInput(push, NeedInput(push, Done(())))
-    }
+    def loop(i: Int): TPipe[A, Void, F, Unit] =
+      if (i <= 0) TDone(())
+      else tawait[F, A, Void].flatMap(_ => loop(i - 1))
+    toPipe(loop(count))
   }
 
   def consumeDlist[F[_], A](implicit M: Monad[F]): Sink[A, F, DList[A]] = {
@@ -239,15 +236,12 @@ object CL {
    * This does not enure that the sink consumes all of those values.
    */
   def isolate[F[_], A](count: Int)(implicit M: Monad[F]): Conduit[A, F, A] = {
-    def close(s: => Int): F[Stream[A]] = M.point(Stream.Empty)
-    def push(c: => Int, x: => A): F[ConduitStateResult[Int, A, A]] =
-      if (c <= 0) M.point(StateFinished(Some(x), Stream.Empty))
-      else {
-        val c1 = c - 1
-        if (c1 <= 0) M.point(StateFinished(None, Stream(x)))
-        else M.point(StateProducing(c1, Stream(x)))
-      }
-    conduitState(count, push, close)
+    import TPipe._
+    def loop(i: Int): TPipe[A, A, F, Unit] =
+      if (i <= 0) TDone(())
+      else tawait[F, A, A].flatMap(x => tyield[F, A, A](x).flatMap(_ => loop(i - 1)))
+
+    toPipe(loop(count))
   }
 
   /**

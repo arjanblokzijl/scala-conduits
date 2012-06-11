@@ -30,7 +30,7 @@ class BinarySpec extends FileSpecification with ScalaCheck {
   }
 
   "binary isolate" ! check { (n: Int, s: Stream[Byte]) =>
-    val bstr = s.map(i => new ByteString(Array(i.toByte)))
+    val bstr = s.map(i => new ByteString(Array(i)))
     val bss = sourceList[Id, ByteString](bstr) %= Binary.isolate(n) %%== consume
     val result = ByteString.concat(bss)
     sbsi.equal(result, ByteString.concat(bstr.take(n)))

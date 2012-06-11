@@ -147,6 +147,8 @@ trait TPipeFunctions {
 
   def tawait[F[_], A, B]: TPipe[A, B, F, A] = TNeedInput(TDone(_))
 
+  def tyield[F[_], A, B](o: => B): TPipe[A, B, F, Unit] = THaveOutput(TDone(()), o)
+
   def tleftover[F[_], A, B](i: A): TPipe[A, B, F, Unit] = TLeftover(TDone(()), i)
 
   def toPipe[F[_], A, B](tpipe: TPipe[A, B, F, Unit])(implicit M: Monad[F]): Pipe[A, B, F, Unit] =

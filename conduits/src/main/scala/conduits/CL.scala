@@ -89,12 +89,18 @@ object CL {
   }
 
   /**Takes the given number of elements from the input stream.*/
-  def take[F[_], A](n: Int)(implicit M: Monad[F]): Sink[A, F, Stream[A]] = {
-     def loop(front: Stream[A] => Stream[A], count: Int): Sink[A, F, Stream[A]] =
-       if (count <= 0) Done(front(Stream()))
-       else await[F, A, Void].flatMap[Stream[A]]((i: Option[A]) => i.map(x => loop(xs => front(x #:: xs), count - 1)).getOrElse(Done(front(Stream()))))
+  def take[F[_], A](n: Int)(implicit M: Monad[F]): Sink[A, F, List[A]] = {
+     def loop(acc: List[A], count: Int): Sink[A, F, List[A]] =
+       if (count <= 0) Done(acc)
+       else await[F, A, Void].flatMap[List[A]]((i: Option[A]) => i match {
+         case None => Done(acc)
+         case Some(x) => {
+           val c1 = count - 1
+           loop(x :: acc, c1)
+         }
+       })
 
-    loop(identity, n)
+    loop(List(), n).map(_.reverse)
   }
 
   /**
@@ -208,13 +214,14 @@ object CL {
   /**
    * concatMap with an accumulator
    */
-  def concatMapAccum[F[_], A, B, AC](accum: AC, f: (AC, A )=> (AC, Stream[B]))(implicit M: Monad[F]): Conduit[A, F, B] = {
-    def close(acc: => AC): F[Stream[B]] = M.point(Stream.Empty)
-    def push(state: => AC, input: => A): F[ConduitStateResult[AC, A, B]] = {
-      val (state1, result) = f(state, input)
-      M.point(StateProducing(state1, result))
+  def concatMapAccum[F[_], A, B, AC](accum: AC, f: (AC, A) => (AC, Stream[B]))(implicit M: Monad[F]): Conduit[A, F, B] = {
+    def loop(acc: AC): TPipe[A, B, F, Unit] = {
+      tawait[F, A, B].flatMap(a => {
+        val (acc1, bs) = f(acc, a)
+        bs.foldLeft(TDone[A, B, F, Unit](()))((b1, b2) => tyield[F, A, B](b2).flatMap(_ => loop(acc1)))
+      })
     }
-    conduitState(accum, push, close)
+    toPipe(loop(accum))
   }
 
   def groupBy[F[_], A](f: (A, A) => Boolean)(implicit M: Monad[F]): Conduit[A, F, Stream[A]] = {

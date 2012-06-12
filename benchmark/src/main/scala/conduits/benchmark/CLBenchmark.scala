@@ -36,6 +36,12 @@ class CLBenchmark extends CBenchmark with BenchmarkData {
      total
    }
 
+   def takeStream(data:Stream[Int]): List[Int] = {
+     var total = List[Int]()
+     total = (CL.sourceList[Id, Int](data) %%== CL.take[Id, Int](100000))
+     total
+   }
+
    def conduitFoldLeft(data: Source[Id, Int]):Int = {
      var total = 0
      total = data %%== CL.foldLeft(0)(_ + _)
@@ -47,4 +53,5 @@ class CLBenchmark extends CBenchmark with BenchmarkData {
    def timeTakeDlistDirect(reps:Int) = run(reps)(takeDListDirect(intStream))
    def timeTakeDlistMonoid(reps:Int) = run(reps)(takeDListMonoid(intStream))
    def timeTakeListBufferMonoid(reps:Int) = run(reps)(takeListBuffer(intStream))
+   def timeTakeStream(reps:Int) = run(reps)(takeStream(intStream))
 }

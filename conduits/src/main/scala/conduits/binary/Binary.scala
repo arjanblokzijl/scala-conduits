@@ -72,8 +72,8 @@ object Binary {
 
   private def conduitStream[F[_]](fs: IO[FileOutputStream])(implicit MR: MonadResource[F]): Conduit[ByteString, F, ByteString] = {
     implicit val M = MR.MO
-    conduitIO[F, ByteString, ByteString, java.io.FileOutputStream](fs, s => IO(s.close), f => bs =>
-      M.map(M.liftIO(bs.writeContents(f)))(_ => IOProducing(Stream(bs))), _ => M.point(Stream.empty))
+    conduitIO[F, ByteString, ByteString, java.io.FileOutputStream](fs, s => IO(s.close), cs =>
+      M.map(M.liftIO(cs.input.writeContents(cs.state)))(_ => IOProducing(Stream(cs.input))), _ => M.point(Stream.empty))
   }
 
   def head[F[_]](implicit M: Monad[F]): Sink[ByteString, F, Option[Byte]] = {

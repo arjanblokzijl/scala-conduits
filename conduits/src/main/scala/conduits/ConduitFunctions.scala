@@ -81,6 +81,8 @@ object ConduitFunctions {
   /**
    * Construct a 'Conduit' with some stateful functions. This function addresses
    * threading the state value for you.
+   *
+   * TODO see whether we still need this.
    */
   def conduitState[S, A, F[_], B](state: => S, push: (=> S, => A) => F[ConduitStateResult[S, A, B]], close: (=> S) => F[Stream[B]])(implicit M: Monad[F]): Conduit[A, F, B] = {
     def push1(s: => S)(input: A): Conduit[A, F, B] =
@@ -95,15 +97,21 @@ object ConduitFunctions {
     NeedInput(push1(state), close1(state))
   }
 
+  case class ConduitState[S, A](state: S, input: A) {
+    def newInput(a: A): ConduitState[S, A] = copy(input = a)
+    def newState(s: S): ConduitState[S, A] = copy(state = s)
+  }
+
+
   /*Construct a Conduit*/
-  def conduitIO[F[_], A, B, S](alloc: IO[S], cleanup: S => IO[Unit], push: S => A => F[ConduitIOResult[A, B]], close: S => F[Stream[B]])(implicit M0: MonadResource[F]): Conduit[A, F, B] = {
+  def conduitIO[F[_], A, B, S](alloc: IO[S], cleanup: S => IO[Unit], push: ConduitState[S, A] => F[ConduitIOResult[A, B]], close: S => F[Stream[B]])(implicit M0: MonadResource[F]): Conduit[A, F, B] = {
     implicit val M = M0.MO
-    def push1(key: => ReleaseKey, state: => S, input: => A): F[Conduit[A, F, B]] = {
-      M.bind(push(state)(input))(res => res.fold(
+    def push1(key: => ReleaseKey, cs: ConduitState[S, A]): F[Conduit[A, F, B]] = {
+      M.bind(push(cs))(res => res.fold(
         finished = (leftover, output) => M.bind(M0.release(key))(_ => M.point(haveMore(Done(leftover, ()), M.point(()), output)))
         ,
         producing = output => M.point(haveMore(
-          NeedInput(i => PipeM(push1(key, state, i), FinalizeM(M0.release(key))), close1(key, state))
+          NeedInput(i => PipeM(push1(key, cs.newInput(i)), FinalizeM(M0.release(key))), close1(key, cs.state))
           , M.bind(M0.release(key))(_ => M.point(()))
           , output
         ))))
@@ -113,7 +121,7 @@ object ConduitFunctions {
 
     NeedInput(input =>
               PipeM(M.bind(M0.allocate(alloc, cleanup))(ks =>
-                push1(ks._1, ks._2, input)), FinalizePure(()))
+                push1(ks._1, ConduitState(ks._2, input))), FinalizePure(()))
               , PipeM(M.bind(M0.allocate(alloc, cleanup))(ks =>
                M.bind(close(ks._2))(os =>
                  M.bind(M0.release(ks._1))(_ => M.point(fromList(os))))), FinalizePure(())

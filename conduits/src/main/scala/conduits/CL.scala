@@ -225,13 +225,14 @@ object CL {
   }
 
   def groupBy[F[_], A](f: (A, A) => Boolean)(implicit M: Monad[F]): Conduit[A, F, Stream[A]] = {
-    def push(as: => Stream[A], v: => A): F[ConduitStateResult[Stream[A], A, Stream[A]]] = as match {
-      case Stream.Empty => M.point(StateProducing(Stream(v), Stream.Empty))
-      case s@(x #:: _) => if (f(x, v)) M.point(StateProducing(v #:: s, Stream.Empty))
-                          else M.point(StateProducing(Stream(v), Stream(s)))
+    def loop(acc: Stream[A])(x: A): Conduit[A, F, Stream[A]] = {
+      await[F, A, Stream[A]].flatMap(my => my match {
+        case None => tryYield(x #:: acc, Done(()))
+        case Some(y) => if (f(x, y)) loop(y #:: acc)(x)
+                        else tryYield(x #:: acc, loop(Stream())(y))
+      })
     }
-    def close(s: => Stream[A]) = M.point(Stream(s))
-    conduitState(Stream.empty, push, close)
+    await[F, A, Stream[A]].flatMap(ox => ox.map(x => loop(Stream())(x)).getOrElse(Done(())))
   }
 
   def zip[F[_], A, B](f1: Source[F, A], f2: Source[F, B])(implicit M: Monad[F]): Source[F, (A, B)] = (f1, f2) match {

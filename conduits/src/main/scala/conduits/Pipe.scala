@@ -370,7 +370,10 @@ trait PipeFunctions {
    * Send a single output value downstream.
    */
   def yieldp[A, B, F[_]](b: => B)(implicit F: Monad[F]): Pipe[A, B, F, Unit] =
-    HaveOutput(Done(None, ()), FinalizePure(()), b)
+    HaveOutput(Done(()), FinalizePure(()), b)
+
+  def tryYield[F[_], A, B](b: B, p: Pipe[A, B, F, Unit])(implicit F: Monad[F]): Pipe[A, B, F, Unit] =
+    HaveOutput(p, FinalizePure(()), b)
 
   /**
    * yieldBind is equivalent to yield b flatMap(_ => p), but the implementation is more efficient.

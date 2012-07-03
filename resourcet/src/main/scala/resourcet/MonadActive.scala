@@ -1,6 +1,7 @@
 package resourcet
 
 import scalaz._
+import scalaz.Id.Id
 import effect.{ST, MonadIO, IO}
 import scalaz.Kleisli._
 
@@ -17,7 +18,7 @@ trait MonadActive[F[_]] {
 }
 
 object MonadActive {
-  implicit def idMonadActive: MonadActive[Id] = new MonadActive[scalaz.Id] {
+  implicit def idMonadActive: MonadActive[Id] = new MonadActive[Id] {
     implicit def F = Id.id
 
     def monadActive = true
@@ -28,7 +29,7 @@ object MonadActive {
     def monadActive = IO.ioMonad.point(true)
   }
 
-  implicit def rtMonadActive[F[_]](implicit M: Monad[F], MO: MonadIO[F], MA: MonadActive[F]): MonadActive[({type l[a] = ResourceT[F, a]})#l] = new MonadActive[({type l[a] = ResourceT[F, a]})#l]  {
+  implicit def rtMonadActive[F[+_]](implicit M: Monad[F], MO: MonadIO[F], MA: MonadActive[F]): MonadActive[({type l[a] = ResourceT[F, a]})#l] = new MonadActive[({type l[a] = ResourceT[F, a]})#l]  {
     implicit def F = resource.resourceTMonad[F]
 
     def monadActive: ResourceT[F, Boolean] = ResourceT[F, Boolean](kleisli(rmMap =>

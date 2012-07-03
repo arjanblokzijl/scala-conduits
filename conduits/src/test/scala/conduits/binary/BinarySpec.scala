@@ -3,6 +3,7 @@ package binary
 
 import org.specs2.mutable.Specification
 import scalaz._
+import Id._
 import std.anyVal._
 import resourcet._
 import resource._

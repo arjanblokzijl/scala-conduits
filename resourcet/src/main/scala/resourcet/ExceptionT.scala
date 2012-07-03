@@ -7,7 +7,7 @@ import Kleisli._
  * The express purpose of this transformer is to allow non-@IO@-based monad
  * stacks to catch exceptions via the 'MonadThrow' typeclass.
  */
-case class ExceptionT[F[_], A](value: Kleisli[F, ExceptionT[F, A], Either[Throwable, A]]) {
+case class ExceptionT[F[+_], A](value: Kleisli[F, ExceptionT[F, A], Either[Throwable, A]]) {
   def flatMap[B](f: A => ExceptionT[F, B])(implicit M: Monad[F]): ExceptionT[F, B] = {
     ExceptionT[F, B](kleisli(et => M.bind(value.run(this))((ei: Either[Throwable, A]) => ei match {
       case Left(e) => M.point(Left(e))
@@ -24,7 +24,7 @@ case class ExceptionT[F[_], A](value: Kleisli[F, ExceptionT[F, A], Either[Throwa
 }
 
 trait ExceptionTInstances {
-  implicit def exceptionTMonad[F[_]](implicit F0: Monad[F]): Monad[({type l[a] = ExceptionT[F, a]})#l] = new Monad[({type l[a] = ExceptionT[F, a]})#l] {
+  implicit def exceptionTMonad[F[+_]](implicit F0: Monad[F]): Monad[({type l[a] = ExceptionT[F, a]})#l] = new Monad[({type l[a] = ExceptionT[F, a]})#l] {
     def bind[A, B](fa: ExceptionT[F, A])(f: (A) => ExceptionT[F, B]): ExceptionT[F, B] = fa flatMap f
 
     def point[A](a: => A) = ExceptionT[F, A](kleisli(s => F0.point(Right(a))))

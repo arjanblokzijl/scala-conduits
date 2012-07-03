@@ -2,6 +2,7 @@ package conduits
 package examples
 
 import scalaz._
+import Id._
 import std.anyVal._
 import std.stream._
 import effect.IO

@@ -6,7 +6,7 @@ import scalaz.effect._
 import scalaz.Kleisli._
 import scalaz.effect.IO.ioMonad
 
-case class ResourceT[F[_], A](value: Kleisli[F, IORef[ReleaseMap], A]) {
+case class ResourceT[F[+_], A](value: Kleisli[F, IORef[ReleaseMap], A]) {
   def flatMap[B](f: (A) => ResourceT[F, B])(implicit F: Monad[F]): ResourceT[F, B] =
     ResourceT[F, B](kleisli(s => F.bind(value.run(s))((a: A) => f(a).value.run(s))))
 
@@ -36,7 +36,7 @@ trait MonadResource[F[_]] {
 
 
 trait ResourceTInstances0 {
-  implicit def resourceTMonadIO[F[_]](implicit M0: MonadIO[F], M1: Monad[F]): MonadIO[({type l[a] = ResourceT[F, a]})#l] = new MonadIO[({type l[a] = ResourceT[F, a]})#l] with ResourceTMonad[F] {
+  implicit def resourceTMonadIO[F[+_]](implicit M0: MonadIO[F], M1: Monad[F]): MonadIO[({type l[a] = ResourceT[F, a]})#l] = new MonadIO[({type l[a] = ResourceT[F, a]})#l] with ResourceTMonad[F] {
     implicit def F: Monad[F] = M1
 
     def liftIO[A](ioa: IO[A]) = ResourceT(kleisli(_ => M0.liftIO(ioa)))
@@ -45,16 +45,16 @@ trait ResourceTInstances0 {
 
 trait ResourceTInstances extends ResourceTInstances0 {
 
-  implicit def resourceTMonad[F[_]](implicit F0: Monad[F]): Monad[({type l[a] = ResourceT[F, a]})#l] = new Monad[({type l[a] = ResourceT[F, a]})#l] {
+  implicit def resourceTMonad[F[+_]](implicit F0: Monad[F]): Monad[({type l[a] = ResourceT[F, a]})#l] = new Monad[({type l[a] = ResourceT[F, a]})#l] {
     def bind[A, B](fa: ResourceT[F, A])(f: (A) => ResourceT[F, B]): ResourceT[F, B] = fa flatMap f
 
     def point[A](a: => A) = ResourceT[F, A](kleisli(s => F0.point(a)))
   }
 
-  implicit def resourceTMonadTrans: MonadTrans[({type l[a[_], b] = ResourceT[a, b]})#l] = new MonadTrans[({type l[a[_], b] = ResourceT[a, b]})#l] {
-    implicit def apply[G[_]](implicit M: Monad[G]): Monad[({type λ[α] = ResourceT[G, α]})#λ] = resourceTMonad[G]
+  implicit def resourceTMonadTrans: MonadTrans[({type l[a[+_], b] = ResourceT[a, b]})#l] = new MonadTrans[({type l[a[+_], b] = ResourceT[a, b]})#l] {
+    implicit def apply[G[+_]](implicit M: Monad[G]): Monad[({type λ[α] = ResourceT[G, α]})#λ] = resourceTMonad[G]
 
-    def liftM[G[_], A](ga: G[A])(implicit M: Monad[G]): ResourceT[G, A] =
+    def liftM[G[+_], A](ga: G[A])(implicit M: Monad[G]): ResourceT[G, A] =
       ResourceT[G, A](kleisli(s => M.map(ga)(identity)))
   }
 
@@ -69,7 +69,7 @@ trait ResourceTInstances extends ResourceTInstances0 {
   }
 
 
-  implicit def resourceTMonadResource[F[_]](implicit F0: MonadIO[F], B0: MonadBase[IO, F]): MonadResource[({type l[a] = ResourceT[F, a]})#l] = new MonadResource[({type l[a] = ResourceT[F, a]})#l] {
+  implicit def resourceTMonadResource[F[+_]](implicit F0: MonadIO[F], B0: MonadBase[IO, F]): MonadResource[({type l[a] = ResourceT[F, a]})#l] = new MonadResource[({type l[a] = ResourceT[F, a]})#l] {
     implicit def MO = resourceTMonadIO[F]
 
     def register(rel: => IO[Unit]) = ResourceT(kleisli(istate => F0.liftIO(resource.register(istate, rel))))
@@ -83,7 +83,7 @@ trait ResourceTInstances extends ResourceTInstances0 {
   }
 }
 
-private[resourcet] trait ResourceTMonad[F[_]] extends Monad[({type l[a] = ResourceT[F, a]})#l] {
+private[resourcet] trait ResourceTMonad[F[+_]] extends Monad[({type l[a] = ResourceT[F, a]})#l] {
   implicit def F: Monad[F]
 
   def bind[A, B](fa: ResourceT[F, A])(f: (A) => ResourceT[F, B]): ResourceT[F, B] =
@@ -151,7 +151,7 @@ trait ResourceTFunctions {
     case t: Throwable => Left(t)
   })
 
-  def runResourceT[F[_], A](rt: ResourceT[F, A])(implicit B: MonadBase[IO, F]): F[A] = {
+  def runResourceT[F[+_], A](rt: ResourceT[F, A])(implicit B: MonadBase[IO, F]): F[A] = {
     val in: IO[IORef[ReleaseMap]] = IO.newIORef(ReleaseMapOpen(Int.MinValue, Int.MinValue, IntMap((Int.MinValue, ioMonad.point(())))))
     val newRef: F[IORef[ReleaseMap]] = B.liftBase(in)
     B.F.bind(newRef)(istate => {

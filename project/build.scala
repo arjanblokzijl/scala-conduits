@@ -20,6 +20,15 @@ object ScalaConduitsBuild extends Build {
     )
   )
 
+  lazy val networkConduits = Project(
+    id = "network-conduits",
+    base = file("network"),
+    dependencies = Seq[ClasspathDep[ProjectReference]](conduits),
+    settings = standardSettings ++ Seq(
+      libraryDependencies ++= Seq(Dependencies.scalaz, Dependencies.scalazEffect, Dependencies.ScalaCheck, Dependencies.Specs)
+    )
+  )
+
   lazy val bytestring = Project(
     id = "bytestring",
     base = file("bytestring"),

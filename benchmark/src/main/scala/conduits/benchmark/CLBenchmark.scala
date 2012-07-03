@@ -6,6 +6,7 @@ import ConduitFunctions._
 import CL._
 import Conduits._
 import scalaz._
+import Id._
 import DList._
 
 object CLBenchmark extends MyRunner { val cls = classOf[CLBenchmark] }

@@ -226,7 +226,7 @@ trait Parser[T, A] { p =>
 object Parser extends ParserFunctions with ParserInstances {
   def pm[T](implicit M: Monoid[T]) = parserMonad[T]
 
-  object parserSyntax extends scalaz.syntax.ToMonadPlusV
+  object parserSyntax extends scalaz.syntax.ToMonadPlusOps
 }
 
 trait ParserInstances0 {

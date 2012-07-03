@@ -4,6 +4,7 @@ import empty.Void
 import resourcet.resource
 import scalaz.std.stream._
 import scalaz._
+import Id._
 import collection.immutable.Stream
 import conduits.pipes._
 import Finalize._

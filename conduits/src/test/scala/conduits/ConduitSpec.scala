@@ -3,6 +3,7 @@ package conduits
 import empty.Void
 import org.specs2.mutable.Specification
 import scalaz._
+import Id._
 import std.stream._
 import std.anyVal._
 import effect.IO

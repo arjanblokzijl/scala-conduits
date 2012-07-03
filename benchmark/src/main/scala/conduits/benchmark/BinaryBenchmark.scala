@@ -3,6 +3,7 @@ package benchmark
 
 import empty.Void
 import scalaz._
+import Id._
 import CL._
 import binary._
 import bs._

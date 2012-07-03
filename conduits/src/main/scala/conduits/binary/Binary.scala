@@ -81,7 +81,7 @@ object Binary {
       case None => NeedInput(push, close)
       case Some((b, bs1)) => Done(Some(b))
     }
-    def close: Sink[ByteString, F, Option[Byte]] = pipeMonad[ByteString, Void, F].point(None)
+    def close: Sink[ByteString, F, Option[Byte]] = Done(None)
     NeedInput(push, close)
   }
 

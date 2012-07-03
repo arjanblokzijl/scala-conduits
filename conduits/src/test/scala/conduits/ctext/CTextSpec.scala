@@ -3,6 +3,7 @@ package ctext
 
 import org.specs2.mutable.Specification
 import scalaz._
+import Id._
 import effect.IO
 import effect.IO._
 import text._

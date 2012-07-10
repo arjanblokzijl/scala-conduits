@@ -7,7 +7,6 @@ import scalaz.{Forall, Monoid, MonadTrans, Monad}
 import scalaz.std.function._
 import scalaz.Free.{Trampoline, return_, suspend}
 import scalaz.effect._
-import javax.print.attribute.standard.Finishings
 import resourcet.{ReleaseKey, MonadResource, MonadThrow}
 
 /**

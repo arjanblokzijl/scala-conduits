@@ -8,7 +8,7 @@ object ScalaConduitsBuild extends Build {
     id = "scala-conduits",
     base = file("."),
     settings = standardSettings,
-    aggregate = Seq(resourcet, bytestring, text, conduits, parse, examples, benchmark)
+    aggregate = Seq(resourcet, bytestring, text, conduits, network, parse, examples, benchmark)
   )
 
   lazy val conduits = Project(
@@ -20,7 +20,7 @@ object ScalaConduitsBuild extends Build {
     )
   )
 
-  lazy val networkConduits = Project(
+  lazy val network = Project(
     id = "network-conduits",
     base = file("network"),
     dependencies = Seq[ClasspathDep[ProjectReference]](conduits),

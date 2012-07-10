@@ -9,6 +9,7 @@ import Pipe._
 import collection.immutable.Stream
 import scalaz.effect.MonadControlIO
 import resourcet.MonadActive
+import java.util.Date
 
 object Conduits {
 

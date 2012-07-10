@@ -13,6 +13,7 @@ import ByteString._
 import java.io.{FileOutputStream, FileInputStream, File}
 import scalaz.{CharSet, Show, Order, Monoid}
 import resourcet.IOUtils._
+import java.util.Date
 
 /**
  * A strict ByteString, which stores [[java.lang.Byte]]'s in an Array.
@@ -34,6 +35,8 @@ final class ByteString(bytes: Array[Byte]) extends IndexedSeq[Byte] with Indexed
   def toByteBuffer: ByteBuffer = ByteBuffer.wrap(toArray).asReadOnlyBuffer
 
   def toArray: Array[Byte] = arr
+
+  override def toString = new String(bytes)
 
   /**
    * Writes the contents of the this ByteString into the given ByteChannel.
@@ -104,6 +107,15 @@ trait ByteStringFunctions {
       case -1 => empty
       case n => fromByteBuffer(buf, n)
     })
+  }
+
+  def writeContents(chan: ByteChannel, bs: ByteString): IO[Int] = {
+    val buf = java.nio.ByteBuffer.allocate(bs.size)
+    IO{
+      buf.put(bs.toByteBuffer)
+      buf.flip()
+      chan.write(buf)
+    }
   }
 
   def empty: ByteString = new ByteString(Array.empty[Byte])

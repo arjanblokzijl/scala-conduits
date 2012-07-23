@@ -4,7 +4,6 @@ package network
 import pipes._
 import bs.ByteString
 import Conduits._
-import network.TcpServer.ServerSettings
 import resourcet.monadControlIO
 import scalaz.effect.IO
 import scalaz.Monad
@@ -26,6 +25,6 @@ object EchoServer extends App {
 
   def echo[F[_]](src: Source[F, ByteString], sink: Sink[ByteString, F, Unit])(implicit F: Monad[F]) = src &= sink
 
-  TcpServer.runServer(ServerSettings(host, port), echo[IO]).unsafePerformIO
+  TcpServer.run(ServerSettings(host, port), echo[IO]).unsafePerformIO
 
 }

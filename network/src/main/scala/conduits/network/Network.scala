@@ -24,8 +24,8 @@ object Network {
     def push: F[Source[F, ByteString]] =
       F.map(F.liftIO(ByteString.getContents(chan)))(bs =>
         if (bs.isEmpty) Done()
-        else HaveOutput(src, close, bs)
-      )
+        else HaveOutput(src, close, bs))
+
     def src = PipeM[Void, ByteString, F, Unit](push, close)
 
     PipeM[Void, ByteString, F, Unit](push, close)

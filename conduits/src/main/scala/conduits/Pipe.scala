@@ -7,7 +7,7 @@ import scalaz.{Forall, Monoid, MonadTrans, Monad}
 import scalaz.std.function._
 import scalaz.Free.{Trampoline, return_, suspend}
 import scalaz.effect._
-import resourcet.{ReleaseKey, MonadResource, MonadThrow}
+import resourcet.{MonadResource, MonadThrow}
 
 /**
  * The underlying datatype for all the types in this package.  In has four

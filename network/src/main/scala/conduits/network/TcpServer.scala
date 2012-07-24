@@ -44,23 +44,27 @@ object TcpServer {
 
   def run(server: ServerSettings, app: Application[IO])(implicit MO: MonadIO[IO], MCO: MonadControlIO[IO]): IO[Unit] = {
     def serve(selector: Selector, c: ServerSocketChannel): IO[Unit] = {
-      register(selector, c, SelectionKey.OP_ACCEPT)
+//      register(selector, c, SelectionKey.OP_ACCEPT)
       selectOnce[IO](selector, c)(socket => {
         def app1 = MO.bind(app(Network.sourceSocket(socket), Network.sinkSocket(socket)))(_ => MO.point(()))
-        forkIO(app1, socket.close()).unsafePerformIO()
-        IO()
+        IO.controlIO((run: IO.RunInBase[IO, IO]) => {
+          forkIO(app1, socket.close()).unsafePerformIO()
+          run.apply(IO(()))
+        })
       })
     }
 
     IO.controlIO[IO, Unit]((run: IO.RunInBase[IO, IO]) => {
       val serverChan = Network.bind(new InetSocketAddress(server.host, server.port))
       try {
-        val selector = Selector.open
-        serverChan.flatMap(chan => {
-          run.apply(forever(serve(selector, chan))(MO))
-        })
+         IO(Selector.open).flatMap(sel =>
+           serverChan.flatMap(chan => {
+             register(sel, chan, SelectionKey.OP_ACCEPT)
+             run.apply(forever(serve(sel, chan))(MO))
+            }
+          ))
       } finally {
-        serverChan.map(_.close)
+        serverChan.map(_.close).unsafePerformIO()
       }
     })
   }
@@ -73,7 +77,7 @@ object TcpServer {
   }
 
   private def selectOnce[F[_]](selector: Selector, server: ServerSocketChannel)(callback: SocketChannel => F[Unit]): IO[Unit] = {
-    def select: Unit = {
+    IO {
       val n = selector.select
       val keys = selector.selectedKeys.asScala.toList
       selector.selectedKeys().clear()
@@ -89,7 +93,6 @@ object TcpServer {
         }
       })
     }
-    IO(select)
   }
 
   def forever[F[_], A, B](fa: => F[A])(implicit F: Monad[F]): F[B] = {

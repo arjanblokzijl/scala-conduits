@@ -22,7 +22,7 @@ object TestClient extends App {
 
   def client(src: Source[IO, ByteString], sink: Sink[ByteString, IO, Unit]): IO[Unit] = {
     def conduit: Conduit[ByteString, IO, ByteString] = {
-      yieldp[ByteString, ByteString, IO](ByteString.fromString("hello world"))
+      yieldp[ByteString, ByteString, IO](ByteString.fromString("hello world " + Thread.currentThread().getId))
         .flatMap(_ => await[IO, ByteString, ByteString]
         .flatMap(bs =>
         pipeMonadTrans[ByteString, ByteString].liftM(IO.putStrLn("EchoClient received: " + bs.getOrElse(ByteString.empty).toString))
@@ -32,5 +32,10 @@ object TestClient extends App {
     src &= conduit =% sink
   }
 
-  TcpClient.runClient[IO](ClientSettings("localhost", 4096), client).unsafePerformIO
+  class ClientRunner extends Runnable {
+    def run() = TcpClient.runClient[IO](ClientSettings("localhost", 4096), client).unsafePerformIO
+  }
+
+  (1 to 20) foreach(_ => new Thread(new ClientRunner).start())
 }
+

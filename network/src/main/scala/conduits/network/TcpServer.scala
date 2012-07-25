@@ -97,7 +97,7 @@ object TcpServer {
 
   object NioSelector {
     def select(selector: Selector, server: ServerSocketChannel): IO[Unit] = {
-      IO(new Thread(new NioSelector(selector, server)).start())
+      IO(new Thread(new NioSelector(selector, server)).start)
     }
   }
 
@@ -108,6 +108,7 @@ object TcpServer {
 
     private def doSelect: IO[Unit] = {
       def select: IO[Unit] = IO {
+       register(selector, server, SelectionKey.OP_ACCEPT)
        def go: Unit = {
         val n = selector.select
         val keys = selector.selectedKeys.asScala.toList
@@ -120,8 +121,8 @@ object TcpServer {
           }
           if (key.isReadable) {
             val readableChan = key.channel.asInstanceOf[SocketChannel]
+            key.cancel //will be handled in a different thread in TCP server, so don't read it again in the next loop
             queue.put(readableChan)
-            key.cancel()
           }
         })
         go

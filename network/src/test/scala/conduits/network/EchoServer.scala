@@ -9,12 +9,6 @@ import scalaz.effect.IO
 import scalaz.Monad
 import java.net.InetAddress
 
-//import IO._
-
-/**
- * User: arjan
- */
-
 object EchoServer extends App {
 
   val host = if (args.length > 1) args(0) else "127.0.0.1"

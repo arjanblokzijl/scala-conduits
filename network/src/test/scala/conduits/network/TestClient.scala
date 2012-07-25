@@ -25,7 +25,7 @@ object TestClient extends App {
       yieldp[ByteString, ByteString, IO](ByteString.fromString("hello world " + Thread.currentThread().getId))
         .flatMap(_ => await[IO, ByteString, ByteString]
         .flatMap(bs =>
-        pipeMonadTrans[ByteString, ByteString].liftM(IO.putStrLn("EchoClient received: " + bs.getOrElse(ByteString.empty).toString))
+        pipeMonadTrans[ByteString, ByteString].liftM(IO.putStrLn("EchoClient %s received: %s" format(Thread.currentThread().getId, bs.getOrElse(ByteString.empty).toString)))
       ))
     }
 

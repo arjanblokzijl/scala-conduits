@@ -12,38 +12,25 @@ import scala.collection.JavaConverters._
 import scalaz.Monad
 import concurrent.{JavaConversions, FutureTaskRunner}
 import java.util.concurrent._
+import scalaz.concurrent.Strategy
 
 case class ServerSettings(host: String = "localhost", port: Int = 40096)
 
 object TcpServer {
 
   private val queue = new LinkedBlockingQueue[SocketChannel]()
-  implicit val runner: FutureTaskRunner = {
-    val numCores = Runtime.getRuntime().availableProcessors()
-    val maxPoolsize = 30
-    val keepAliveTime = 60000L
-    val workQueue = new LinkedBlockingQueue[Runnable]
-    val exec = new ThreadPoolExecutor(numCores,
-                                      maxPoolsize,
-                                      keepAliveTime,
-                                      TimeUnit.MILLISECONDS,
-                                      workQueue,
-                                      new ThreadPoolExecutor.CallerRunsPolicy)
-    JavaConversions.asTaskRunner(exec)
-  }
 
-  private def forkIO(action: IO[Unit], after: => Unit): IO[Unit] = {
-    import scala.concurrent.ops.future
-    IO(future {
-        try {
-          action.unsafePerformIO()
+  private def forkIO(action: IO[Unit], after: => Unit)(implicit S: Strategy): IO[Unit] =
+    IO(S(try {
+          action unsafePerformIO
+          ()
         } finally {
           after
         }
-      }(runner).apply())
-  }
+      ))
 
-  def run(server: ServerSettings, app: Application[IO])(implicit MO: MonadIO[IO], MCO: MonadControlIO[IO]): IO[Unit] = {
+
+  def run(server: ServerSettings, app: Application[IO])(implicit MO: MonadIO[IO], MCO: MonadControlIO[IO], S: Strategy = TcpServerStrategy.DefaultServerStrategy): IO[Unit] = {
     def serve(selector: Selector, c: ServerSocketChannel): IO[Unit] = {
       val socket = queue.take()
       IO.controlIO((run: IO.RunInBase[IO, IO]) => {
@@ -69,25 +56,6 @@ object TcpServer {
     if (chan != null) {
       chan.configureBlocking(false)
       chan.register(sel, ops)
-    }
-  }
-
-  private def selectOnce[F[_]](selector: Selector, server: ServerSocketChannel)(callback: SocketChannel => F[Unit]): IO[Unit] = {
-    IO {
-      val n = selector.select
-      val keys = selector.selectedKeys.asScala.toList
-      selector.selectedKeys().clear()
-      keys.foreach(key => {
-        if (key.isAcceptable) {
-          val server = key.channel.asInstanceOf[ServerSocketChannel]
-          val chan = server.accept
-          register(selector, chan, SelectionKey.OP_READ)
-        }
-        if (key.isReadable) {
-          val readableChan = key.channel.asInstanceOf[SocketChannel]
-          callback(readableChan)
-        }
-      })
     }
   }
 

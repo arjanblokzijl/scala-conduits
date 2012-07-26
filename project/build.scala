@@ -25,7 +25,7 @@ object ScalaConduitsBuild extends Build {
     base = file("network"),
     dependencies = Seq[ClasspathDep[ProjectReference]](conduits),
     settings = standardSettings ++ Seq(
-      libraryDependencies ++= Seq(Dependencies.scalaz, Dependencies.scalazEffect, Dependencies.ScalaCheck, Dependencies.Specs)
+      libraryDependencies ++= Seq(Dependencies.scalaz, Dependencies.scalazEffect, Dependencies.scalazConcurrent, Dependencies.ScalaCheck, Dependencies.Specs)
     )
   )
 
@@ -127,8 +127,9 @@ object ScalaConduitsBuild extends Build {
   )
 
   object Dependencies {
-    def scalaz = "org.scalaz" % "scalaz-core_2.9.2" % "7.0-SNAPSHOT"
-    def scalazEffect = "org.scalaz" % "scalaz-effect_2.9.2" % "7.0-SNAPSHOT"
+    def scalaz = "org.scalaz" % "scalaz-core_2.9.2" % "7.0.0-M1"
+    def scalazEffect = "org.scalaz" % "scalaz-effect_2.9.2" % "7.0.0-M1"
+    def scalazConcurrent = "org.scalaz" % "scalaz-concurrent_2.9.2" % "7.0.0-M1"
     //lazy val specs = "org.scala-tools.testing" %% "specs" % "1.6.7" % "test" withSources ()
     def scalacheck = "org.scala-tools.testing" % "scalacheck_2.8.1" % "1.8" % "test"
 

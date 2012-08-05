@@ -21,7 +21,7 @@ object Char8 {
       res(bpos + 1) = (buff(i) & 0x00FF).toByte
       i += 1
     }
-    new ByteString(res)
+    ByteString(res)
   }
 
   def unpack(bs: ByteString): String = {

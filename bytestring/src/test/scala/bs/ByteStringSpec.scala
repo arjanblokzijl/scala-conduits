@@ -21,5 +21,9 @@ class ByteStringSpec extends FileSpecification {
       bs2.isEmpty must beFalse
       !bsi.equal(bs1, bs2)
     }
+    "foldRight does not blow the stack" in {
+      val res = ByteString(Array.range(0, 10000000).map(b => 1.toByte)).foldRight(0)(_+_)
+      res must be_==(10000000)
+    }
   }
 }

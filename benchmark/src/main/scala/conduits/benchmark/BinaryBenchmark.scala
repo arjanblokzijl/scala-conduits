@@ -15,7 +15,7 @@ class BinaryBenchmark extends CBenchmark with BenchmarkData {
 
   def binaryLines(data: Array[Byte]): DList[ByteString] = {
     var total = DList[ByteString]()
-    total = sourceList[Id, ByteString](Stream(new ByteString(data))) %%== Binary.lines[Id] =% consumeDlist
+    total = sourceList[Id, ByteString](Stream(ByteString(data))) %%== Binary.lines[Id] =% consumeDlist
     total
   }
 

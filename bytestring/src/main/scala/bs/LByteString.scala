@@ -137,7 +137,7 @@ sealed trait LByteString {
   /**Applies the provided function to each Byte in the bytestring.*/
   def map(f: Byte => Byte): LByteString = this match {
     case Empty() => Empty.apply
-    case Chunk(c, cs) => Chunk(ByteString.fromSeq(c map f), cs map f)
+    case Chunk(c, cs) => Chunk(c.bsMap(f), cs map f)
   }
 }
 
@@ -192,7 +192,7 @@ trait LByteStringFunctions {
     case Stream.Empty => Empty.apply
     case _ => {
       val (xs, xss) = s.splitAt(chunkSize)
-      val head = new ByteString(xs.toArray)
+      val head = ByteString(xs.toArray)
       if (xss isEmpty) Chunk(head, Empty.apply)
       else Chunk(head, pack(xss))
     }

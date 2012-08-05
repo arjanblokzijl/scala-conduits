@@ -7,5 +7,5 @@ import org.scalacheck.Arbitrary
  */
 
 object ByteStringArbitrary {
-  implicit def ByteStringArbitrary: Arbitrary[ByteString] = Arbitrary(Arbitrary.arbitrary[Array[Byte]].map(new ByteString(_)))
+  implicit def ByteStringArbitrary: Arbitrary[ByteString] = Arbitrary(Arbitrary.arbitrary[Array[Byte]].map(ByteString(_)))
 }

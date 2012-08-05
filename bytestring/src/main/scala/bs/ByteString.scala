@@ -18,19 +18,34 @@ import java.util.Date
 /**
  * A strict ByteString, which stores [[java.lang.Byte]]'s in an Array.
  */
-final class ByteString(bytes: Array[Byte]) extends IndexedSeq[Byte] with IndexedSeqOptimized[Byte, ByteString] {
+abstract class ByteString(bytes: Array[Byte]) extends IndexedSeq[Byte] with IndexedSeqOptimized[Byte, ByteString] {
   private val arr = bytes.clone
-  override protected[this] def newBuilder: Builder[Byte, ByteString] = ArrayBuilder.make[Byte]().mapResult(new ByteString(_))
+  override protected[this] def newBuilder: Builder[Byte, ByteString] = ArrayBuilder.make[Byte]().mapResult(ByteString(_))
 
   def &:(b: Byte): ByteString = cons(b, this)
 
-  def uncons: Option[(Byte, ByteString)] = if (isEmpty) None else Some(arr.head, new ByteString(arr.tail))
+  def uncons: Option[(Byte, ByteString)] = if (isEmpty) None else Some(arr.head, ByteString(arr.tail))
 
-  def apply(idx: Int) = arr(idx)
+  final def apply(idx: Int) = arr(idx)
 
-  def length = arr.length
+  final val length = arr.length
 
-  def append(that: ByteString): ByteString = new ByteString(arr ++ that.toArray)
+  def bsMap(f: Byte => Byte): ByteString = ByteString(arr.map(f))
+
+  override def foldRight[B](z: B)(f: (Byte, B) => B): B = {
+    import scala.collection.mutable.ArrayStack
+    val s = new ArrayStack[Byte]
+    arr.foreach(a => s += a)
+    var r = z
+    while (!s.isEmpty) {
+      // force and copy the value of r to ensure correctness
+      val w = r
+      r = f(s.pop, w)
+    }
+    r
+  }
+
+  def append(that: ByteString): ByteString = ByteString(arr ++ that.toArray)
 
   def toByteBuffer: ByteBuffer = ByteBuffer.wrap(toArray).asReadOnlyBuffer
 
@@ -51,6 +66,7 @@ final class ByteString(bytes: Array[Byte]) extends IndexedSeq[Byte] with Indexed
   def writeFile(f: File): IO[Unit] = writeContents(new FileOutputStream(f))
 }
 
+
 trait ByteStringInstances {
 
   import ByteString._
@@ -58,7 +74,7 @@ trait ByteStringInstances {
   implicit val byteStringInstance: Monoid[ByteString] with Order[ByteString] with Show[ByteString] = new Monoid[ByteString] with Order[ByteString] with Show[ByteString] {
     def show(f: ByteString) = f.toString.toList
 
-    def append(f1: ByteString, f2: => ByteString) = new ByteString(f1.toArray ++ f2.toArray)
+    def append(f1: ByteString, f2: => ByteString) = ByteString(f1.toArray ++ f2.toArray)
 
     def zero: ByteString = empty
 
@@ -84,19 +100,21 @@ trait ByteStringInstances {
 
 trait ByteStringFunctions {
   val DefaultChunkSize = 8*1024
+  def apply(arr: Array[Byte]) = new ByteString(arr){}
+
   /** Converts a `java.nio.ByteBuffer` into a `ByteString`. */
   def fromByteBuffer(bytes: java.nio.ByteBuffer, size: Int = DefaultChunkSize): ByteString = {
     bytes.rewind()
     val ar = new Array[Byte](size)
     bytes.get(ar)
-    new ByteString(ar)
+    ByteString(ar)
   }
 
-  def fromString(s: String): ByteString = new ByteString(s.getBytes(CharSet.UTF8))
+  def fromString(s: String): ByteString = ByteString(s.getBytes(CharSet.UTF8))
 
-  def fromSeq(s: Seq[Byte]): ByteString = new ByteString(s.toArray)
+  def fromSeq(s: Seq[Byte]): ByteString = ByteString(s.toArray)
 
-  def cons(b: Byte, bs: ByteString): ByteString = new ByteString(b +: bs.toArray)
+  def cons(b: Byte, bs: ByteString): ByteString = ByteString(b +: bs.toArray)
 
   def readFile(f: File, chunkSize: Int = DefaultChunkSize): IO[ByteString] =
     IO(new FileInputStream(f).getChannel) flatMap(getContents(_, chunkSize))
@@ -118,9 +136,9 @@ trait ByteStringFunctions {
     }
   }
 
-  def empty: ByteString = new ByteString(Array.empty[Byte])
+  def empty: ByteString = ByteString(Array.empty[Byte])
 
-  def singleton(b: Byte): ByteString = new ByteString(Array(b))
+  def singleton(b: Byte): ByteString = ByteString(Array(b))
 
   def concat(bss: Stream[ByteString]): ByteString =
     bss.foldLeft[ByteString](empty)((bs1, bs2) => bs1.append(bs2))

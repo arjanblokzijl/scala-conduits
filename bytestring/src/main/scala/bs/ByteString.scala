@@ -18,24 +18,23 @@ import java.util.Date
 /**
  * A strict ByteString, which stores [[java.lang.Byte]]'s in an Array.
  */
-abstract class ByteString(bytes: Array[Byte]) extends IndexedSeq[Byte] with IndexedSeqOptimized[Byte, ByteString] {
-  private val arr = bytes.clone
+abstract class ByteString(private[bs] val bytes: Array[Byte]) extends IndexedSeq[Byte] with IndexedSeqOptimized[Byte, ByteString] {
   override protected[this] def newBuilder: Builder[Byte, ByteString] = ArrayBuilder.make[Byte]().mapResult(ByteString(_))
 
   def &:(b: Byte): ByteString = cons(b, this)
 
-  def uncons: Option[(Byte, ByteString)] = if (isEmpty) None else Some(arr.head, ByteString(arr.tail))
+  def uncons: Option[(Byte, ByteString)] = if (isEmpty) None else Some(bytes.head, ByteString(bytes.tail))
 
-  final def apply(idx: Int) = arr(idx)
+  final def apply(idx: Int) = bytes(idx)
 
-  final val length = arr.length
+  final val length = bytes.length
 
-  def bsMap(f: Byte => Byte): ByteString = ByteString(arr.map(f))
+  def bsMap(f: Byte => Byte): ByteString = ByteString(bytes.map(f))
 
   override def foldRight[B](z: B)(f: (Byte, B) => B): B = {
     import scala.collection.mutable.ArrayStack
     val s = new ArrayStack[Byte]
-    arr.foreach(a => s += a)
+    bytes.foreach(a => s += a)
     var r = z
     while (!s.isEmpty) {
       // force and copy the value of r to ensure correctness
@@ -45,11 +44,11 @@ abstract class ByteString(bytes: Array[Byte]) extends IndexedSeq[Byte] with Inde
     r
   }
 
-  def append(that: ByteString): ByteString = ByteString(arr ++ that.toArray)
+  def append(that: ByteString): ByteString = ByteString(bytes ++ that.toArray)
 
   def toByteBuffer: ByteBuffer = ByteBuffer.wrap(toArray).asReadOnlyBuffer
 
-  def toArray: Array[Byte] = arr
+  def toArray: Array[Byte] = bytes
 
   override def toString = new String(bytes)
 
@@ -100,7 +99,7 @@ trait ByteStringInstances {
 
 trait ByteStringFunctions {
   val DefaultChunkSize = 8*1024
-  def apply(arr: Array[Byte]) = new ByteString(arr){}
+  def apply(arr: Array[Byte]) = new ByteString(arr.clone){}
 
   /** Converts a `java.nio.ByteBuffer` into a `ByteString`. */
   def fromByteBuffer(bytes: java.nio.ByteBuffer, size: Int = DefaultChunkSize): ByteString = {

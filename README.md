@@ -2,6 +2,9 @@ This is a direct port to Scala of Micheal Snoyman's [Conduit library](https://gi
 Conduits are an approach to the streaming data problem. It is meant as an
 alternative to enumerators/iterators.
 
+[![Build Status](https://secure.travis-ci.org/arjanblokzijl/scala-conduits.png)](http://travis-ci.org/arjanblokzijl/scala-conduits)
+https://secure.travis-ci.org/[YOUR_GITHUB_USERNAME]/[YOUR_PROJECT_NAME].png
+
 The most up-to-date documentation is available as an appendix of the Yesod
 book, at:
 [http://www.yesodweb.com/book/conduits](http://www.yesodweb.com/book/conduits). Below follows a brief description

@@ -4,3 +4,6 @@
  jdk:
    - openjdk7
    - openjdk6
+
+install: /bin/true
+script: ./sbt -J-Xss1M -J-Xms512M -J-Xmx700M -J-XX:MaxPermSize=128M ";clean;compile;test"

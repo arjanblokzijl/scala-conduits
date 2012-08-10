@@ -6,7 +6,6 @@ package bs
  * truncated to 8 bits.
  */
 object Char8 {
-
   /**
    * Encode the given string into a ByteString.
    */

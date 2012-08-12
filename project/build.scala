@@ -34,7 +34,12 @@ object ScalaConduitsBuild extends Build {
     base = file("http"),
     dependencies = Seq[ClasspathDep[ProjectReference]](conduits),
     settings = standardSettings ++ Seq(
-      libraryDependencies ++= Seq(Dependencies.scalaz, Dependencies.scalazEffect, Dependencies.scalazConcurrent, Dependencies.ScalaCheck, Dependencies.Specs)
+      libraryDependencies ++= Seq(Dependencies.scalaz,
+        Dependencies.scalazEffect,
+        Dependencies.scalazConcurrent,
+        Dependencies.ScalaCheck,
+        Dependencies.servlet,
+        Dependencies.Specs)
     )
   )
 
@@ -141,7 +146,7 @@ object ScalaConduitsBuild extends Build {
     def scalazConcurrent = "org.scalaz" % "scalaz-concurrent_2.9.2" % "7.0.0-M1"
     //lazy val specs = "org.scala-tools.testing" %% "specs" % "1.6.7" % "test" withSources ()
     def scalacheck = "org.scala-tools.testing" % "scalacheck_2.8.1" % "1.8" % "test"
-
+    def servlet = "javax.servlet" % "servlet-api" % "2.5" % "provided->default"
     def ScalaCheck = "org.scala-tools.testing" % "scalacheck_2.9.1" % "1.9" % "test"
 
     def Specs = "org.specs2" % "specs2_2.9.1" % "1.6.1" % "test"

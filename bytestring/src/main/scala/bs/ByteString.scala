@@ -1,16 +1,15 @@
 package bs
 
 import java.nio.ByteBuffer
-import java.nio.channels.ByteChannel
+import java.nio.channels.{Channels, ReadableByteChannel, ByteChannel}
 import scalaz.effect.IO
 import IO._
 import scala.io.Codec
 import collection.mutable.{ArrayBuilder, Builder}
-import collection.{Traversable, IndexedSeqOptimized}
-import collection.generic.CanBuildFrom
+import collection.IndexedSeqOptimized
 import scalaz.std.anyVal
 import ByteString._
-import java.io.{FileOutputStream, FileInputStream, File}
+import java.io.{ByteArrayInputStream, FileOutputStream, FileInputStream, File}
 import scalaz.{CharSet, Show, Order, Monoid}
 import resourcet.IOUtils._
 import java.util.Date
@@ -109,6 +108,12 @@ trait ByteStringFunctions {
     ByteString(ar)
   }
 
+  /** Converts a `java.nio.ByteBuffer` into a `ByteString`. */
+  def fromInputStream(stream: java.io.InputStream, size: Int = DefaultChunkSize): IO[ByteString] = {
+    val chan = java.nio.channels.Channels.newChannel(stream)
+    getContents(chan)
+  }
+
   def fromString(s: String): ByteString = ByteString(s.getBytes(CharSet.UTF8))
 
   def fromSeq(s: Seq[Byte]): ByteString = ByteString(s.toArray)
@@ -118,7 +123,7 @@ trait ByteStringFunctions {
   def readFile(f: File, chunkSize: Int = DefaultChunkSize): IO[ByteString] =
     IO(new FileInputStream(f).getChannel) flatMap(getContents(_, chunkSize))
 
-  def getContents(chan: ByteChannel, capacity: Int = DefaultChunkSize): IO[ByteString] = {
+  def getContents(chan: ReadableByteChannel, capacity: Int = DefaultChunkSize): IO[ByteString] = {
     val buf = java.nio.ByteBuffer.allocate(capacity)
     IO(chan.read(buf)).map(i => i match {
       case -1 => empty

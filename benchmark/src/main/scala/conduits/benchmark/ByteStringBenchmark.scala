@@ -28,6 +28,13 @@ class ByteStringBenchmark extends CBenchmark with BenchmarkData {
     total
   }
 
+  def akkaByteStringAppend(data: Array[Byte]): AkkaByteString = {
+    var total = AkkaByteString.apply(Array[Byte]())
+    total = total ++ AkkaByteString(data)
+    total
+  }
+
   def timeByteString(reps:Int) = run(reps)(byteStringAppend(byteArr))
   def timeFingerTree(reps:Int) = run(reps)(fingerTreeByteStringAppend(byteArr))
+  def timeAkka(reps:Int) = run(reps)(akkaByteStringAppend(byteArr))
 }

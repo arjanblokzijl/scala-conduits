@@ -110,7 +110,7 @@ sealed trait FingerTreeByteString extends syntax.Ops[FingerTree[Int, Array[Byte]
     i - from
   }
 
-  def toArray: Array[Byte] = self.toList.toArray.flatten
+  def toArray: Array[Byte] = self.toList.toArray.flatten //TODO optimize this
 
   override def toString = new String(toArray)
 }

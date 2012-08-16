@@ -28,4 +28,8 @@ class FingerTreeByteStringSpec extends Specification with ScalaCheck {
     (b: Byte, s: Array[Byte]) =>
       FingerTreeByteString(s).dropWhile(_ != b).toArray must be_==(s.dropWhile(_ != b))
   }
+  "append" ! check {
+    (a1: Array[Byte], a2: Array[Byte]) =>
+      (FingerTreeByteString(a1) ++ FingerTreeByteString(a2)).toArray must be_==(a1 ++ a2)
+  }
 }

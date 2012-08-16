@@ -91,7 +91,7 @@ trait TextInstances {
   import Text._
 
   implicit val textInstance: Monoid[Text] with Order[Text] with Show[Text] = new Monoid[Text] with Order[Text] with Show[Text] {
-    def show(f: Text) = f.toString.toList
+//    def show(f: Text) = f.toString.toList
 
     def append(f1: Text, f2: => Text) = new Text(f1.toArray ++ f2.toArray)
 

@@ -70,7 +70,7 @@ trait ByteStringInstances {
   import ByteString._
 
   implicit val byteStringInstance: Monoid[ByteString] with Order[ByteString] with Show[ByteString] = new Monoid[ByteString] with Order[ByteString] with Show[ByteString] {
-    def show(f: ByteString) = f.toString.toList
+//    def show(f: ByteString) = f.toString
 
     def append(f1: ByteString, f2: => ByteString) = ByteString(f1.toArray ++ f2.toArray)
 

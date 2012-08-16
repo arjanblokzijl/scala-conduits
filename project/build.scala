@@ -141,9 +141,9 @@ object ScalaConduitsBuild extends Build {
   )
 
   object Dependencies {
-    def scalaz = "org.scalaz" % "scalaz-core_2.9.2" % "7.0.0-M1"
-    def scalazEffect = "org.scalaz" % "scalaz-effect_2.9.2" % "7.0.0-M1"
-    def scalazConcurrent = "org.scalaz" % "scalaz-concurrent_2.9.2" % "7.0.0-M1"
+    def scalaz = "org.scalaz" % "scalaz-core_2.9.2" % "7.0.0-M2"
+    def scalazEffect = "org.scalaz" % "scalaz-effect_2.9.2" % "7.0.0-M2"
+    def scalazConcurrent = "org.scalaz" % "scalaz-concurrent_2.9.2" % "7.0.0-M2"
     //lazy val specs = "org.scala-tools.testing" %% "specs" % "1.6.7" % "test" withSources ()
     def scalacheck = "org.scala-tools.testing" % "scalacheck_2.8.1" % "1.8" % "test"
     def servlet = "javax.servlet" % "servlet-api" % "2.5" % "provided->default"

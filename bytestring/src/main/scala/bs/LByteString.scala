@@ -201,10 +201,10 @@ trait LByteStringFunctions {
 
 trait LByteStringInstances {
   implicit val lbyteStringInstance: Monoid[LByteString] with Order[LByteString] with Show[LByteString] = new Monoid[LByteString] with Order[LByteString] with Show[LByteString] {
-    def show(f: LByteString) = f match {
-      case Empty() => "<Empty>".toList
-      case Chunk(c, cs) => ByteString.byteStringInstance.show(c) ::: show(cs)
-    }
+//    def show(f: LByteString) = f match {
+//      case Empty() => "<Empty>".toList
+//      case Chunk(c, cs) => ByteString.byteStringInstance.show(c) ::: show(cs)
+//    }
 
     def append(f1: LByteString, f2: => LByteString) = f1 append f2
 

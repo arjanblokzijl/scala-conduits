@@ -166,10 +166,10 @@ sealed trait LTextFunctions {
 
 sealed trait LTextInstances {
   implicit val lTextStringInstance: Monoid[LText] with Order[LText] with Show[LText] = new Monoid[LText] with Order[LText] with Show[LText] {
-    def show(f: LText) = f match {
-      case Empty() => "<Empty>".toList
-      case Chunk(c, cs) => Text.textInstance.show(c) ::: show(cs)
-    }
+//    def show(f: LText) = f match {
+//      case Empty() => "<Empty>".toList
+//      case Chunk(c, cs) => Text.textInstance.show(c) ::: show(cs)
+//    }
 
     def append(f1: LText, f2: => LText) = f1 append f2
 

@@ -23,7 +23,7 @@ class ByteStringBenchmark extends CBenchmark with BenchmarkData {
   }
 
   def akkaByteStringAppend(data: Array[Byte]): AkkaByteString = {
-    var total = AkkaByteString.apply(Array[Byte]())
+    var total = AkkaByteString(Array[Byte]())
     total = total ++ AkkaByteString(data)
     total
   }

@@ -29,5 +29,5 @@ class ByteStringBenchmark extends CBenchmark with BenchmarkData {
   }
 
   def timeByteString(reps:Int) = run(reps)(byteStringAppend(byteArr))
-  def timeAkka(reps:Int) = run(reps)(akkaByteStringAppend(byteArr))
+  def timeAkkaByteString(reps:Int) = run(reps)(akkaByteStringAppend(byteArr))
 }

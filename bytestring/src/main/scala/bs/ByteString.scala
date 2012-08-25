@@ -153,20 +153,22 @@ sealed trait ByteString extends syntax.Ops[FingerTree[Int, Array[Byte]]] {
 
   def ===(that: ByteString): Boolean = this.toList == that.toList
 
-  def foldRight[A, B](z: => B)(f: (Byte, => B) => B) = {
-      def foldArr(z: B)(arr: Array[Byte]): B = {
-        import scala.collection.mutable.ArrayStack
-        val s = new ArrayStack[Byte]
-        arr.foreach(a => s += a)
-        var r = z
-        while (!s.isEmpty) {
-          // force and copy the value of r to ensure correctness
-          val w = r
-          r = f(s.pop, w)
-        }
-        r
-      }
+  def foldLeft[A, B](z: => B)(f: (B, Byte) => B) =
+    self.foldLeft(z)((b, arr) => arr.foldLeft(z)(f))
 
+  def foldRight[A, B](z: => B)(f: (Byte, => B) => B) = {
+    def foldArr(z: B)(arr: Array[Byte]): B = {
+      import scala.collection.mutable.ArrayStack
+      val s = new ArrayStack[Byte]
+      arr.foreach(a => s += a)
+      var r = z
+      while (!s.isEmpty) {
+       // force and copy the value of r to ensure correctness
+        val w = r
+        r = f(s.pop, w)
+      }
+      r
+    }
     self.foldRight(z)((arr, b) => foldArr(z)(arr))
   }
 }

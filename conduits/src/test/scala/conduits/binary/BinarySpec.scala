@@ -1,8 +1,8 @@
 package conduits
 package binary
 
-import org.specs2.mutable.Specification
 import scalaz._
+import scalaz.std.stream._
 import Id._
 import std.anyVal._
 import resourcet._
@@ -52,7 +52,7 @@ class BinarySpec extends FileSpecification with ScalaCheck {
   "binary lines" ! check { (s: String) =>
     val actual = sourceList[Id, ByteString](Stream(ByteString.fromString(s))) %%== Binary.lines[Id] =% consume
     val expected = s.lines.toStream.map(ByteString.fromString)
-    actual must be_== (expected)
+    Equal[Stream[ByteString]].equal(actual, expected) must beTrue
   }
 
   "binary" should {
@@ -86,7 +86,7 @@ class BinarySpec extends FileSpecification with ScalaCheck {
       val s: String = "01234\n5678\n9"
       val actual: Stream[ByteString] = sourceList[Id, ByteString](Stream(ByteString.fromString(s))) %%== Binary.lines[Id] =% consume
       val expected = s.lines.toStream.map(ByteString.fromString)
-      actual must be_==(expected)
+      Equal[Stream[ByteString]].equal(actual, expected) must beTrue
     }
   }
 }

@@ -85,7 +85,7 @@ sealed trait LByteString {
    * @return
    */
   def conss(b: Byte): LByteString = fold(empty = singleton(b), chunk = (sb, lb) =>
-    if (sb.length < 64) Chunk(b &: sb, lb) else Chunk(ByteString.singleton(b), lb)
+    if (sb.length < 64) Chunk(b -: sb, lb) else Chunk(ByteString.singleton(b), lb)
   )
 
   /**Appends two lazy bytestrings.*/
@@ -137,7 +137,7 @@ sealed trait LByteString {
   /**Applies the provided function to each Byte in the bytestring.*/
   def map(f: Byte => Byte): LByteString = this match {
     case Empty() => Empty.apply
-    case Chunk(c, cs) => Chunk(c.bsMap(f), cs map f)
+    case Chunk(c, cs) => Chunk(c.map(f), cs map f)
   }
 }
 

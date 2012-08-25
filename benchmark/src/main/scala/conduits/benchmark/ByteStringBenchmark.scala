@@ -18,13 +18,7 @@ class ByteStringBenchmark extends CBenchmark with BenchmarkData {
 
   def byteStringAppend(data: Array[Byte]): ByteString = {
     var total = ByteString.empty
-    total = total.append(ByteString(data))
-    total
-  }
-
-  def fingerTreeByteStringAppend(data: Array[Byte]): FingerTreeByteString = {
-    var total = FingerTreeByteString.empty
-    total = total ++ FingerTreeByteString(data)
+    total = total ++ ByteString(data)
     total
   }
 
@@ -35,6 +29,5 @@ class ByteStringBenchmark extends CBenchmark with BenchmarkData {
   }
 
   def timeByteString(reps:Int) = run(reps)(byteStringAppend(byteArr))
-  def timeFingerTree(reps:Int) = run(reps)(fingerTreeByteStringAppend(byteArr))
   def timeAkka(reps:Int) = run(reps)(akkaByteStringAppend(byteArr))
 }

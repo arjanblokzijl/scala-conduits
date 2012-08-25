@@ -1,12 +1,49 @@
 package bs
 
-/**
- * User: arjan
- */
+import org.specs2.mutable.Specification
+import org.specs2.ScalaCheck
 
-class ByteStringSpec extends FileSpecification {
+class ByteStringSpec extends FileSpecification with ScalaCheck {
+
+  "take" ! check {
+    (i: Int, s: Array[Byte]) =>
+      ByteString(s).take(i).toArray must be_==(s take i)
+  }
+  "drop" ! check {
+    (i: Int, s: Array[Byte]) =>
+      ByteString(s).drop(i).toArray must be_==(s drop i)
+  }
+  "span single array" ! check {
+    (b: Byte, s: Array[Byte]) =>
+      val (l, r) = ByteString(s).span(_ != b)
+      val (l1, r1) = s span(_ != b)
+      l.toArray must be_==(l1)
+      r.toArray must be_==(r1)
+  }
+
+  "span mutliple arrays" ! check {
+    (b: Byte, arr: Array[Byte]) =>
+      val (l, r) = (ByteString(arr) ++ ByteString(arr)).span(_ != b)
+      val (l1, r1) = (arr ++ arr) span(_ != b)
+      l.toArray must be_==(l1)
+      r.toArray must be_==(r1)
+  }
+
+  "takeWhile" ! check {
+    (b: Byte, s: Array[Byte]) =>
+      ByteString(s).takeWhile(_ != b).toArray must be_==(s.takeWhile(_ != b))
+  }
+  "dropWhile" ! check {
+    (b: Byte, s: Array[Byte]) =>
+      ByteString(s).dropWhile(_ != b).toArray must be_==(s.dropWhile(_ != b))
+  }
+  "append" ! check {
+    (a1: Array[Byte], a2: Array[Byte]) =>
+      (ByteString(a1) ++ ByteString(a2)).toArray must be_==(a1 ++ a2)
+  }
+
   val bsi = ByteString.byteStringInstance
-  "a bs" should {
+  "a bytestring" should {
     "reading a file twice should be equal" in {
       val bs1 = ByteString.readFile(test1).unsafePerformIO
       val bs2 = ByteString.readFile(test1).unsafePerformIO

@@ -44,7 +44,7 @@ object CText {
       extra match {
         case Left((exc, _)) => PipeM(MT.monadThrow(exc), finalizeMonadThrow[F].monadThrow[Unit](exc))
         case Right(bs1) => {
-          def app(bs2: ByteString): ByteString = bs1 append(bs2)
+          def app(bs2: ByteString): ByteString = bs1 ++ bs2
           def close1 = close(bs1)
           if (bs1.isEmpty) HaveOutput(NeedInput(push, close1), close2(bs), text)
           else HaveOutput(NeedInput(bs => push(app(bs)), close1), close2(bs), text)

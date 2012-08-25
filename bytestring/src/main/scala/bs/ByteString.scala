@@ -1,104 +1,201 @@
 package bs
 
-import java.nio.ByteBuffer
-import java.nio.channels.{Channels, ReadableByteChannel, ByteChannel}
-import scalaz.effect.IO
-import IO._
-import scala.io.Codec
-import collection.mutable.{ArrayBuilder, Builder}
-import collection.IndexedSeqOptimized
-import scalaz.std.anyVal
+import scalaz._
+import effect.IO
+import java.io.{FileOutputStream, FileInputStream, File}
+import java.nio.channels.{ByteChannel, ReadableByteChannel}
 import ByteString._
-import java.io.{ByteArrayInputStream, FileOutputStream, FileInputStream, File}
-import scalaz.{CharSet, Show, Order, Monoid}
+import scalaz.syntax
+import java.nio.ByteBuffer
+import std.anyVal
+import std.indexedSeq.indexedSeqMonoid
 import resourcet.IOUtils._
-import java.util.Date
+import scalaz.Reducer._
+import scalaz.UnitReducer
+import bs.ByteString.apply
+import scala.Some
 
-/**
- * A strict ByteString, which stores [[java.lang.Byte]]'s in an Array.
- */
-abstract class ByteString(private[bs] val bytes: Array[Byte]) extends IndexedSeq[Byte] with IndexedSeqOptimized[Byte, ByteString] {
-  override protected[this] def newBuilder: Builder[Byte, ByteString] = ArrayBuilder.make[Byte]().mapResult(ByteString(_))
+sealed trait ByteString extends syntax.Ops[FingerTree[Int, Array[Byte]]] {
 
-  def &:(b: Byte): ByteString = cons(b, this)
-
-  def uncons: Option[(Byte, ByteString)] = if (isEmpty) None else Some(bytes.head, ByteString(bytes.tail))
-
-  final def apply(idx: Int) = bytes(idx)
-
-  final val length = bytes.length
-
-  def bsMap(f: Byte => Byte): ByteString = ByteString(bytes.map(f))
-
-  override def foldRight[B](z: B)(f: (Byte, B) => B): B = {
-    import scala.collection.mutable.ArrayStack
-    val s = new ArrayStack[Byte]
-    bytes.foreach(a => s += a)
-    var r = z
-    while (!s.isEmpty) {
-      // force and copy the value of r to ensure correctness
-      val w = r
-      r = f(s.pop, w)
-    }
-    r
+  private def rangeError(i: Int) = sys.error("Index out of range: " + i + " >= " + self.measure)
+  /**
+    * Returns the byte at the given position. Throws an error if the index is out of range.
+    * Time complexity: O(log N)
+    */
+  def apply(i: Int): Byte = {
+    val (a, b) = self.split(_ > i)
+    b.viewl.headOption.map(_(i - a.measure)).getOrElse(rangeError(i))
   }
 
-  def append(that: ByteString): ByteString = ByteString(bytes ++ that.toArray)
+  /**
+   * Returns the number of characters in this `ByteString`.
+   * Time complexity: O(1)
+   */
+  def length: Int = self.measure
 
-  def toByteBuffer: ByteBuffer = ByteBuffer.wrap(toArray).asReadOnlyBuffer
+  def isEmpty: Boolean = length == 0
 
-  def toArray: Array[Byte] = bytes
+  /**
+   * Returns the number of characters in this `ByteString`.
+   * Time complexity: O(1)
+   */
+  def size: Int = self.measure
 
-  override def toString = new String(bytes)
+  /**
+   * Appends another `Cord` to the end of this one.
+   * Time complexity: O(log (min N M)) where M and N are the lengths of the two `Cord`s.
+   */
+  def ++(xs: ByteString): ByteString = byteString(self <++> xs.self)
+
+  /**
+   * Appends a `byte arraz` to the end of this `Cord`.
+   * Time complexity: O(1)
+   */
+  def :+(x: => Array[Byte]): ByteString = byteString(self :+ x)
+
+  /**
+   * Prepends a `byte array` to the beginning of this `Cord`.
+   * Time complexity: O(1)
+   */
+  def +:(x: => Array[Byte]): ByteString = byteString(x +: self)
+
+  /**
+   * Prepends a `Byte` to the beginning of this `Cord`.
+   * Time complexity: O(1)
+   */
+  def -:(x: => Byte): ByteString = byteString(Array(x) +: self)
+
+  /**
+   * Appends a `Byte` to the end of this `Cord`.
+   * Time complexity: O(1)
+   */
+  def :-(x: => Byte): ByteString = byteString(self :+ Array(x))
+
+  def uncons: Option[(Byte, ByteString)] = if (isEmpty) None else Some(head, tail)
+
+  def map[B](f: Byte => Byte): ByteString = byteString(self map (_ map f))
+
+  def headOption: Option[Byte] = if (isEmpty) None else Some(head)
+
+  def head: Byte = self.head.head
+
+  def tail: ByteString = drop(1)
 
   /**
    * Writes the contents of the this ByteString into the given ByteChannel.
-   */
+  */
   def writeContents(os: FileOutputStream): IO[Unit] =
     if (isEmpty) IO(())
     else withFile(os)(s => IO(s.getChannel.write(toByteBuffer)) flatMap(_ => IO(())))
 
-  /**
-   * Writes the contents of the this ByteString into the given File.
-   */
   def writeFile(f: File): IO[Unit] = writeContents(new FileOutputStream(f))
-}
 
+
+  /**
+   * Splits this `ByteString` in two at the given position.
+   * Time complexity: O(log N)
+   */
+  def split(i: Int): (ByteString, ByteString) = {
+    //sanity checking makes the actual implementation simpler
+    if (i >= self.measure) (byteString(self), empty)
+    else if (i <= 0) (empty, byteString(self))
+    else {
+      val (l, r) = self.split(_ > i)
+      val (l1, r1) = r.viewl.headOption.map(_.splitAt(i - l.measure)).getOrElse(rangeError(i))
+
+      val right = if (r.measure > self.measure - i) {
+        val (_, r2) = r.viewl.tailOption.map(_.split(_ > r1.length)).getOrElse(rangeError(i))
+        r1 +: r2
+      } else r
+
+      (byteString(l :+ l1), byteString(right))
+    }
+  }
+
+  /**
+   * Removes the first `n` characters from the front of this `ByteString`.
+   * Time complexity: O(min N (N - n))
+   */
+  def drop(n: Int): ByteString = split(n)._2
+
+  def take(n: Int): ByteString = split(n)._1
+
+  def dropWhile(p: Byte => Boolean): ByteString = drop(prefixLength(p))
+
+  def takeWhile(p: Byte => Boolean): ByteString = take(prefixLength(p))
+
+  def span(p: Byte => Boolean): (ByteString, ByteString) =
+    splitAt(prefixLength(p))
+
+
+  def prefixLength(p: Byte => Boolean): Int = segmentLength(p, 0)
+
+  def splitAt(n: Int): (ByteString, ByteString) = (take(n), drop(n))
+
+  def segmentLength(p: Byte => Boolean, from: Int): Int = {
+    val len = length
+    var i = from
+    while (i < len && p(this(i))) i += 1
+    i - from
+  }
+
+  def toStream: Stream[Byte] = self.toStream.flatMap(_.toStream)
+
+  def toArray: Array[Byte] = toList.toArray
+
+  def toList: List[Byte] = self.map(x => x)(ByteString.ListReducer).measure
+
+  def toByteBuffer: ByteBuffer = ByteBuffer.wrap(toArray).asReadOnlyBuffer
+
+  def toIndexedSeq: IndexedSeq[Byte] = self.foldMap(_.toIndexedSeq : IndexedSeq[Byte])
+
+  override def toString = new String(toArray)
+
+  def ===(that: ByteString): Boolean = this.toList == that.toList
+
+  def foldRight[A, B](z: => B)(f: (Byte, => B) => B) = {
+      def foldArr(z: B)(arr: Array[Byte]): B = {
+        import scala.collection.mutable.ArrayStack
+        val s = new ArrayStack[Byte]
+        arr.foreach(a => s += a)
+        var r = z
+        while (!s.isEmpty) {
+          // force and copy the value of r to ensure correctness
+          val w = r
+          r = f(s.pop, w)
+        }
+        r
+      }
+
+    self.foldRight(z)((arr, b) => foldArr(z)(arr))
+  }
+}
 
 trait ByteStringInstances {
 
   import ByteString._
 
-  implicit val byteStringInstance: Monoid[ByteString] with Order[ByteString] with Show[ByteString] = new Monoid[ByteString] with Order[ByteString] with Show[ByteString] {
+  implicit val byteStringInstance: Monoid[ByteString] with Order[ByteString] with Show[ByteString] = new Monoid[ByteString] with Show[ByteString]  with Order[ByteString] {
 //    def show(f: ByteString) = f.toString
 
     def append(f1: ByteString, f2: => ByteString) = ByteString(f1.toArray ++ f2.toArray)
 
     def zero: ByteString = empty
 
-    def order(x: ByteString, y: ByteString): scalaz.Ordering = {
-      val i1 = x.iterator
-      val i2 = y.iterator
-      while (i1.hasNext && i2.hasNext) {
-        val a1 = i1.next()
-        val a2 = i2.next()
-        val o = if (a1 < a2) scalaz.Ordering.LT
-        else if (a1 > a2) scalaz.Ordering.GT
-        else scalaz.Ordering.EQ
-        if (o != scalaz.Ordering.EQ) {
-          return o
-        }
-      }
-      anyVal.booleanInstance.order(i1.hasNext, i2.hasNext)
-    }
+    import scalaz.std.list._
+    import scalaz.std.anyVal._
+    def order(x: ByteString, y: ByteString): scalaz.Ordering =
+      Order[List[Byte]].order(x.toList, y.toList)
 
     override def equalIsNatural: Boolean = true
   }
 }
 
+
+
 trait ByteStringFunctions {
+  import ByteString._
   val DefaultChunkSize = 8*1024
-  def apply(arr: Array[Byte]) = new ByteString(arr.clone){}
 
   /** Converts a `java.nio.ByteBuffer` into a `ByteString`. */
   def fromByteBuffer(bytes: java.nio.ByteBuffer, size: Int = DefaultChunkSize): ByteString = {
@@ -140,13 +237,33 @@ trait ByteStringFunctions {
     }
   }
 
-  def empty: ByteString = ByteString(Array.empty[Byte])
-
-  def singleton(b: Byte): ByteString = ByteString(Array(b))
-
   def concat(bss: Stream[ByteString]): ByteString =
-    bss.foldLeft[ByteString](empty)((bs1, bs2) => bs1.append(bs2))
+    bss.foldLeft[ByteString](empty)((bs1, bs2) => bs1 ++ bs2)
 
 }
 
-object ByteString extends ByteStringInstances with ByteStringFunctions
+object ByteString extends ByteStringInstances with ByteStringFunctions {
+  import scalaz.std.anyVal._
+
+  private def byteString[A](v: FingerTree[Int, Array[Byte]]): ByteString = new ByteString {
+    val self = v
+  }
+
+  def empty[A]: ByteString =
+    byteString(FingerTree.empty[Int, Array[Byte]])
+
+  def singleton(b: => Byte): ByteString = apply(Array(b))
+
+
+  def apply(ar: Array[Byte]): ByteString =
+    byteString(FingerTree.single[Int, Array[Byte]](ar)(sizer))
+
+  implicit def sizer: Reducer[Array[Byte], Int] = UnitReducer((a: Array[Byte]) => a.length)
+
+  import scalaz.std.list._
+  def ListReducer: Reducer[Array[Byte], List[Byte]] = {
+    unitConsReducer((b: Array[Byte]) => b.toList, c => c.toList ++ _)
+  }
+
+
+}

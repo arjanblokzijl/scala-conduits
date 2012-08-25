@@ -144,7 +144,7 @@ object Binary {
         case Some((_, second1)) => HaveOutput(push(identity)(second1), FinalizePure(()), sofar(first))
         case None => {
           val rest = sofar(more)
-          NeedInput(push(rest.append _), close(rest))
+          NeedInput(push(rest ++ _), close(rest))
         }
       }
     }

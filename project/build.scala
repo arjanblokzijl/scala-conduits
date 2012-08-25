@@ -8,7 +8,7 @@ object ScalaConduitsBuild extends Build {
     id = "scala-conduits",
     base = file("."),
     settings = standardSettings,
-    aggregate = Seq(resourcet, bytestring, text, conduits, network, http, parse, examples, benchmark)
+    aggregate = Seq(resourcet, bytestring, text, conduits, network, http, examples, benchmark)
   )
 
   lazy val conduits = Project(
@@ -56,15 +56,6 @@ object ScalaConduitsBuild extends Build {
     id = "text",
     base = file("text"),
     dependencies = Seq[ClasspathDep[ProjectReference]](bytestring),
-    settings = standardSettings ++ Seq(
-      libraryDependencies ++= Seq(Dependencies.scalaz, Dependencies.scalazEffect, Dependencies.ScalaCheck, Dependencies.Specs)
-    )
-  )
-
-  lazy val parse = Project(
-    id = "parse",
-    base = file("parse"),
-    dependencies = Seq[ClasspathDep[ProjectReference]](bytestring, text),
     settings = standardSettings ++ Seq(
       libraryDependencies ++= Seq(Dependencies.scalaz, Dependencies.scalazEffect, Dependencies.ScalaCheck, Dependencies.Specs)
     )

@@ -52,6 +52,11 @@ class ByteStringSpec extends FileSpecification with ScalaCheck {
       ByteString(a1).foldLeft(0)(_+_) must be_==(a1.foldLeft(0)(_+_))
   }
 
+  "zip" ! check {
+    (a1: Array[Byte], a2: Array[Byte]) =>
+      ByteString(a1).zip(ByteString(a2)).toArray must be_==((a1 zip a2))
+  }
+
   val bsi = ByteString.byteStringInstance
   "a bytestring" should {
     "reading a file twice should be equal" in {

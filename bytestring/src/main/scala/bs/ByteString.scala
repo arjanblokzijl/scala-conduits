@@ -22,7 +22,7 @@ sealed trait ByteString extends syntax.Ops[FingerTree[Int, Array[Byte]]] {
     * Returns the byte at the given position. Throws an error if the index is out of range.
     * Time complexity: O(log N)
     */
-  def apply(i: Int): Byte = {
+  final def apply(i: Int): Byte = {
     val (a, b) = self.split(_ > i)
     b.viewl.headOption.map(_(i - a.measure)).getOrElse(rangeError(i))
   }
@@ -31,71 +31,79 @@ sealed trait ByteString extends syntax.Ops[FingerTree[Int, Array[Byte]]] {
    * Returns the number of characters in this `ByteString`.
    * Time complexity: O(1)
    */
-  def length: Int = self.measure
+  final def length: Int = self.measure
 
-  def isEmpty: Boolean = length == 0
+  final def isEmpty: Boolean = length == 0
 
   /**
    * Returns the number of characters in this `ByteString`.
    * Time complexity: O(1)
    */
-  def size: Int = self.measure
+  final def size: Int = self.measure
 
   /**
    * Appends another `Cord` to the end of this one.
    * Time complexity: O(log (min N M)) where M and N are the lengths of the two `Cord`s.
    */
-  def ++(xs: ByteString): ByteString = byteString(self <++> xs.self)
+  final def ++(xs: ByteString): ByteString = byteString(self <++> xs.self)
 
   /**
    * Appends a `byte arraz` to the end of this `Cord`.
    * Time complexity: O(1)
    */
-  def :+(x: => Array[Byte]): ByteString = byteString(self :+ x)
+  final def :+(x: => Array[Byte]): ByteString = byteString(self :+ x)
 
   /**
    * Prepends a `byte array` to the beginning of this `Cord`.
    * Time complexity: O(1)
    */
-  def +:(x: => Array[Byte]): ByteString = byteString(x +: self)
+  final def +:(x: => Array[Byte]): ByteString = byteString(x +: self)
 
   /**
    * Prepends a `Byte` to the beginning of this `Cord`.
    * Time complexity: O(1)
    */
-  def -:(x: => Byte): ByteString = byteString(Array(x) +: self)
+  final def -:(x: => Byte): ByteString = byteString(Array(x) +: self)
 
   /**
    * Appends a `Byte` to the end of this `Cord`.
    * Time complexity: O(1)
    */
-  def :-(x: => Byte): ByteString = byteString(self :+ Array(x))
+  final def :-(x: => Byte): ByteString = byteString(self :+ Array(x))
 
-  def uncons: Option[(Byte, ByteString)] = if (isEmpty) None else Some(head, tail)
+  final def uncons: Option[(Byte, ByteString)] = if (isEmpty) None else Some(head, tail)
 
-  def map[B](f: Byte => Byte): ByteString = byteString(self map (_ map f))
+  final def map[B](f: Byte => Byte): ByteString = byteString(self map (_ map f))
 
-  def headOption: Option[Byte] = if (isEmpty) None else Some(head)
+  final def headOption: Option[Byte] = if (isEmpty) None else Some(head)
 
-  def head: Byte = self.head.head
+  final def tailOption: Option[ByteString] = if (isEmpty) None else Some(tail)
 
-  def tail: ByteString = drop(1)
+  final def head: Byte = self.head.head
+
+  final def tail: ByteString = drop(1)
+
+  final def zip(bs: ByteString): Stream[(Byte, Byte)] = zipWith(bs)((_, _))
+
+  final def zipWith[A](bs: ByteString)(f: (Byte, Byte) => A): Stream[A] =
+      if (isEmpty || bs.isEmpty) Stream.empty
+      else f(head, bs.head) #:: tail.zipWith(bs.tail)(f)
 
   /**
    * Writes the contents of the this ByteString into the given ByteChannel.
   */
-  def writeContents(os: FileOutputStream): IO[Unit] =
+  final def writeContents(os: FileOutputStream): IO[Unit] =
     if (isEmpty) IO(())
     else withFile(os)(s => IO(s.getChannel.write(toByteBuffer)) flatMap(_ => IO(())))
 
-  def writeFile(f: File): IO[Unit] = writeContents(new FileOutputStream(f))
+  final def writeFile(f: File): IO[Unit] = writeContents(new FileOutputStream(f))
 
 
   /**
    * Splits this `ByteString` in two at the given position.
    * Time complexity: O(log N)
    */
-  def split(i: Int): (ByteString, ByteString) = {
+  final def split(i: Int): (ByteString, ByteString) = {
     //sanity checking makes the actual implementation simpler
     if (i >= self.measure) (byteString(self), empty)
     else if (i <= 0) (empty, byteString(self))
@@ -116,47 +124,46 @@ sealed trait ByteString extends syntax.Ops[FingerTree[Int, Array[Byte]]] {
    * Removes the first `n` characters from the front of this `ByteString`.
    * Time complexity: O(min N (N - n))
    */
-  def drop(n: Int): ByteString = split(n)._2
+  final def drop(n: Int): ByteString = split(n)._2
 
-  def take(n: Int): ByteString = split(n)._1
+  final def take(n: Int): ByteString = split(n)._1
 
-  def dropWhile(p: Byte => Boolean): ByteString = drop(prefixLength(p))
+  final def dropWhile(p: Byte => Boolean): ByteString = drop(prefixLength(p))
 
-  def takeWhile(p: Byte => Boolean): ByteString = take(prefixLength(p))
+  final def takeWhile(p: Byte => Boolean): ByteString = take(prefixLength(p))
 
-  def span(p: Byte => Boolean): (ByteString, ByteString) =
+  final def span(p: Byte => Boolean): (ByteString, ByteString) =
     splitAt(prefixLength(p))
 
+  final def prefixLength(p: Byte => Boolean): Int = segmentLength(p, 0)
 
-  def prefixLength(p: Byte => Boolean): Int = segmentLength(p, 0)
+  final def splitAt(n: Int): (ByteString, ByteString) = (take(n), drop(n))
 
-  def splitAt(n: Int): (ByteString, ByteString) = (take(n), drop(n))
-
-  def segmentLength(p: Byte => Boolean, from: Int): Int = {
+  final def segmentLength(p: Byte => Boolean, from: Int): Int = {
     val len = length
     var i = from
     while (i < len && p(this(i))) i += 1
     i - from
   }
 
-  def toStream: Stream[Byte] = self.toStream.flatMap(_.toStream)
+  final def toStream: Stream[Byte] = self.toStream.flatMap(_.toStream)
 
-  def toArray: Array[Byte] = toList.toArray
+  final def toArray: Array[Byte] = toList.toArray
 
-  def toList: List[Byte] = self.map(x => x)(ByteString.ListReducer).measure
+  final def toList: List[Byte] = self.map(x => x)(ByteString.ListReducer).measure
 
-  def toByteBuffer: ByteBuffer = ByteBuffer.wrap(toArray).asReadOnlyBuffer
+  final def toByteBuffer: ByteBuffer = ByteBuffer.wrap(toArray).asReadOnlyBuffer
 
-  def toIndexedSeq: IndexedSeq[Byte] = self.foldMap(_.toIndexedSeq : IndexedSeq[Byte])
+  final def toIndexedSeq: IndexedSeq[Byte] = self.foldMap(_.toIndexedSeq : IndexedSeq[Byte])
 
-  override def toString = new String(toArray)
+  final override def toString = new String(toArray)
 
-  def ===(that: ByteString): Boolean = this.toList == that.toList
+  final def ===(that: ByteString): Boolean = this.toList == that.toList
 
-  def foldLeft[A, B](z: => B)(f: (B, Byte) => B) =
+  final def foldLeft[A, B](z: => B)(f: (B, Byte) => B) =
     self.foldLeft(z)((b, arr) => arr.foldLeft(z)(f))
 
-  def foldRight[A, B](z: => B)(f: (Byte, => B) => B) = {
+  final def foldRight[A, B](z: => B)(f: (Byte, => B) => B) = {
     def foldArr(z: B)(arr: Array[Byte]): B = {
       import scala.collection.mutable.ArrayStack
       val s = new ArrayStack[Byte]
@@ -266,6 +273,5 @@ object ByteString extends ByteStringInstances with ByteStringFunctions {
   def ListReducer: Reducer[Array[Byte], List[Byte]] = {
     unitConsReducer((b: Array[Byte]) => b.toList, c => c.toList ++ _)
   }
-
 
 }

@@ -67,10 +67,13 @@ object CText {
     NeedInput(push, close(ByteString.empty))
   }
 
+  private final val LF: Char = 0x0A
+  private final val FF: Char = 0x0C
+
   /**Split the given Text into lines.*/
   def lines[F[_]](implicit M: Monad[F]): Conduit[Text, F, Text] = {
     def push[S](sofar: Text => Text)(more: Text): Conduit[Text, F, Text] = {
-      val (first, second) = more.span(_ != '\n')
+      val (first, second) = more.span(c => c != LF && c != FF)
       second.uncons match {
         case Some((_, second1)) => HaveOutput(push(identity)(second1), FinalizePure(()), sofar(first))
         case None => {

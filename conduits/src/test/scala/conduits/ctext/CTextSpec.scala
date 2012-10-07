@@ -86,6 +86,13 @@ class CTextSpec extends Specification with ScalaCheck {
       val expected = s.lines.map(Text.pack).toStream
       actual must be_==(expected)
     }
+    "ctext lines" in {
+      val str = "a\fb" //special case for new page character
+      val actual = sourceList[Id, Text](Stream(new Text(str.toCharArray))) %%== CText.lines[Id] =% consume
+      val expected = str.lines.map(Text.pack).toList
+      actual.toList must be_== (expected)
+    }
+
     "split items" in {
       val s: String = "0123\n4\n5\n678\n9"
       val texts = Stream(Text.pack("0123\n4"), Text.pack("\n5\n"), Text.pack("678\n9"))
